@@ -34,8 +34,7 @@ local Library = {
     ConfigObjects = {},
     Open = true,
     AccentColor = Theme.Accent,
-    Keybind = Enum.KeyCode.RightControl,
-    AllElements = {} -- NEW: Central registry for all elements for smart search
+    Keybind = Enum.KeyCode.RightControl
 }
 
 local CurrentKeybinds = {}
@@ -43,102 +42,45 @@ local Notifications = Instance.new("ScreenGui")
 Notifications.Name = "RavinNotifications"
 Notifications.Parent = CoreGui
 Notifications.ZIndexBehavior = Enum.ZIndexBehavior.Global
-if syn and syn.protect_gui then syn.protect_gui(Notifications) end -- Added GUI Protection
 
 --// Utility Functions
 local function GetConfigName(name)
     return ConfigFolder .. "/" .. name .. ConfigExtension
 end
 
-local function RefreshConfigList()
-    local list = {}
-    local success = pcall(function() -- Safely check and list files
-        if isfolder(ConfigFolder) then
-            for _, file in ipairs(listfiles(ConfigFolder)) do
-                if file:sub(-#ConfigExtension) == ConfigExtension then
-                    local name = file:gsub(ConfigFolder.."/", ""):gsub(ConfigExtension, "")
-                    table.insert(list, name)
-                end
-            end
-        end
-    end)
-    return list
-end
-
 local function SaveConfiguration(name)
-    if name == "" or not writefile then return end
-
     local Data = {}
-    local json
-    
-    local success, err = pcall(function()
-        for flag, value in pairs(Library.Flags) do
-            if typeof(value) == "Color3" then
-                Data[flag] = {R = value.R, G = value.G, B = value.B, Type = "Color"}
-            elseif typeof(value) == "EnumItem" and value:IsA("KeyCode") then
-                Data[flag] = {Name = value.Name, Type = "Keybind"}
-            else
-                Data[flag] = value
-            end
+    for flag, value in pairs(Library.Flags) do
+        if typeof(value) == "Color3" then
+            Data[flag] = {R = value.R, G = value.G, B = value.B, Type = "Color"}
+        elseif typeof(value) == "EnumItem" then
+            Data[flag] = {Name = value.Name, Type = "Keybind"}
+        else
+            Data[flag] = value
         end
-        json = HttpService:JSONEncode(Data)
-    end)
-
-    if not success then
-        Library:Notify("Config Error", "Failed to encode data: " .. tostring(err), 4)
-        return
     end
-
-    local writeSuccess, writeErr = pcall(function()
-        if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
-        writefile(GetConfigName(name), json)
-    end)
-
-    if not writeSuccess then
-        Library:Notify("Config Error", "Failed to save file: " .. tostring(writeErr), 4)
-    else
-        Library:Notify("Configuration", "Saved config: " .. name, 3)
-    end
+    writefile(GetConfigName(name), HttpService:JSONEncode(Data))
 end
 
 local function LoadConfiguration(name)
-    if not isfile(GetConfigName(name)) or not readfile then
-        Library:Notify("Config Error", "Config file not found: " .. name, 3)
-        return
-    end
+    if not isfile(GetConfigName(name)) then return end
     
     local Content = readfile(GetConfigName(name))
-    local Data
-    
-    local decodeSuccess, decodeErr = pcall(function()
-        Data = HttpService:JSONDecode(Content)
-    end)
-
-    if not decodeSuccess or not Data then
-        Library:Notify("Config Error", "Failed to decode config: " .. tostring(decodeErr), 4)
-        return
-    end
+    local Data = HttpService:JSONDecode(Content)
     
     for flag, value in pairs(Data) do
-        local finalValue = value
         if type(value) == "table" and value.Type == "Color" then
-            finalValue = Color3.new(value.R, value.G, value.B)
+            Library.Flags[flag] = Color3.new(value.R, value.G, value.B)
         elseif type(value) == "table" and value.Type == "Keybind" then
-            finalValue = Enum.KeyCode[value.Name] or Enum.KeyCode.Unknown
+            Library.Flags[flag] = Enum.KeyCode[value.Name]
+        else
+            Library.Flags[flag] = value
         end
         
-        Library.Flags[flag] = finalValue
-        
-        if Library.ConfigObjects[flag] and Library.ConfigObjects[flag].Set then
-            local setSuccess, setErr = pcall(function()
-                 Library.ConfigObjects[flag]:Set(finalValue)
-            end)
-            if not setSuccess then
-                warn("Zov-UI Config Load Error on '" .. flag .. "': " .. tostring(setErr))
-            end
+        if Library.ConfigObjects[flag] then
+            Library.ConfigObjects[flag]:Set(Library.Flags[flag])
         end
     end
-    Library:Notify("Configuration", "Loaded config: " .. name, 3)
 end
 
 local function MakeDraggable(topbarobject, object)
@@ -150,7 +92,6 @@ local function MakeDraggable(topbarobject, object)
     local function Update(input)
         local Delta = input.Position - DragStart
         local pos = UDim2.new(StartPosition.X.Scale, StartPosition.X.Offset + Delta.X, StartPosition.Y.Scale, StartPosition.Y.Offset + Delta.Y)
-        -- Used Tween for smooth drag, as per your existing code
         local Tween = TweenService:Create(object, TweenInfo.new(0.15), {Position = pos})
         Tween:Play()
     end
@@ -247,8 +188,7 @@ function Library:CreateWindow(hubName, toggleKey)
     ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
-    
+
     local OpenBtn = Instance.new("TextButton")
     OpenBtn.Name = "MobileToggle"
     OpenBtn.Size = UDim2.new(0, 50, 0, 50)
@@ -332,35 +272,13 @@ function Library:CreateWindow(hubName, toggleKey)
     SearchBar.BackgroundColor3 = Theme.Background
     SearchBar.BorderColor3 = Theme.Border
     SearchBar.BorderSizePixel = 1
-    SearchBar.PlaceholderText = "Search Tab or Feature..."
+    SearchBar.PlaceholderText = "Search Tab..."
     SearchBar.Text = ""
     SearchBar.TextColor3 = Theme.Text
     SearchBar.PlaceholderColor3 = Theme.TextDark
     SearchBar.Font = Enum.Font.Gotham
     SearchBar.TextSize = 12
     SearchBar.Parent = SidebarContainer
-    
-    -- NEW: Smart Search Results Container
-    local SearchResults = Instance.new("ScrollingFrame")
-    SearchResults.Name = "SearchResults"
-    SearchResults.Size = UDim2.new(1, -142, 1, -36)
-    SearchResults.Position = UDim2.new(0, 142, 0, 36)
-    SearchResults.BackgroundTransparency = 1
-    SearchResults.ScrollBarThickness = 2
-    SearchResults.ScrollBarImageColor3 = Theme.Accent
-    SearchResults.Visible = false
-    SearchResults.Parent = MainFrame
-    
-    local SearchLayout = Instance.new("UIListLayout")
-    SearchLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    SearchLayout.Padding = UDim.new(0, 6)
-    SearchLayout.Parent = SearchResults
-    
-    local SearchPad = Instance.new("UIPadding")
-    SearchPad.PaddingTop = UDim.new(0, 6)
-    SearchPad.PaddingLeft = UDim.new(0, 4)
-    SearchPad.PaddingRight = UDim.new(0, 4)
-    SearchPad.Parent = SearchResults
 
     local Sidebar = Instance.new("ScrollingFrame")
     Sidebar.Size = UDim2.new(1, 0, 1, -36)
@@ -399,94 +317,15 @@ function Library:CreateWindow(hubName, toggleKey)
     end)
 
     local TabButtons = {} 
-    local ActiveTab = nil
-
-    -- NEW: Smart Search Logic (Finds elements across all tabs)
+    
     SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
-        local query = SearchBar.Text:lower():gsub("^%s*", "") -- Trim leading whitespace
-        
-        if query == "" then
-            Sidebar.Visible = true
-            SearchResults.Visible = false
-            -- Restore active tab visibility
-            for _, child in pairs(ContentArea:GetChildren()) do child.Visible = false end
-            if ActiveTab then ActiveTab.Visible = true end
-        else
-            Sidebar.Visible = false
-            SearchResults.Visible = true
-            -- Hide normal content
-            for _, child in pairs(ContentArea:GetChildren()) do child.Visible = false end
-            
-            -- Clear previous search results
-            for _, result in pairs(SearchResults:GetChildren()) do 
-                if result:IsA("Frame") then result:Destroy() end
+        local text = SearchBar.Text:lower()
+        for _, btn in pairs(TabButtons) do
+            if text == "" or btn.Text:lower():find(text) then
+                btn.Visible = true
+            else
+                btn.Visible = false
             end
-            
-            local foundCount = 0
-            
-            for _, elementData in pairs(Library.AllElements) do
-                local name = elementData.Name:lower()
-                if name:find(query) then
-                    local element = elementData.Instance
-                    local clone = element:Clone()
-                    clone.Name = "SearchResult_" .. elementData.Name
-                    clone.BackgroundTransparency = 0 -- Ensure background is visible in search results
-                    clone.BackgroundColor3 = Theme.Section
-                    clone.Parent = SearchResults
-                    
-                    if elementData.Type == "Slider" then
-                        -- Sliders need special handling to clone dragging logic, but for simplicity here,
-                        -- we just use the original value and don't allow interaction in search results.
-                        -- True production libraries would require cloning the entire input logic.
-                        local Label = clone:FindFirstChild("TextLabel")
-                        if Label then Label.Text = elementData.Name .. " (Slider Value: " .. tostring(Library.Flags[elementData.Flag] or elementData.Default) .. ")" end
-                    elseif elementData.Type == "Toggle" then
-                        local Indicator = clone:FindFirstChild("Box"):FindFirstChild("Indicator")
-                        local Label = clone:FindFirstChild("TextLabel")
-                        if Indicator and Label then 
-                            local isToggled = Library.Flags[elementData.Flag] or elementData.Default
-                            Indicator.Visible = isToggled
-                            Label.Text = elementData.Name .. (isToggled and " (ON)" or " (OFF)")
-                            
-                            -- Implement basic toggle functionality in search result
-                            clone.MouseButton1Click:Connect(function()
-                                local newState = not (Library.Flags[elementData.Flag] or elementData.Default)
-                                Library.Flags[elementData.Flag] = newState
-                                Indicator.Visible = newState
-                                Label.Text = elementData.Name .. (newState and " (ON)" or " (OFF)")
-                                elementData.Set(newState) -- Trigger original element's update/callback
-                            end)
-                        end
-                    elseif elementData.Type == "Button" then
-                         -- Button only works when clicked in the search results
-                        clone.Text = elementData.Name .. " (Click)"
-                        clone.MouseButton1Click:Connect(function()
-                            -- Simulate button press on the original button
-                            local btn = elementData.Instance
-                            local originalText = btn.Text
-                            TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Theme.Accent}):Play()
-                            task.wait(0.1)
-                            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Background}):Play()
-                            elementData.Callback()
-                        end)
-                    end
-                    
-                    foundCount = foundCount + 1
-                end
-            end
-            
-            if foundCount == 0 then
-                local Label = Instance.new("TextLabel")
-                Label.Size = UDim2.new(1, 0, 0, 20)
-                Label.BackgroundTransparency = 1
-                Label.Text = "No results found for '" .. query .. "'"
-                Label.TextColor3 = Theme.TextDark
-                Label.Font = Enum.Font.Gotham
-                Label.TextSize = 12
-                Label.Parent = SearchResults
-            end
-            
-            SearchResults.CanvasSize = UDim2.new(0,0,0, SearchLayout.AbsoluteContentSize.Y)
         end
     end)
 
@@ -531,12 +370,10 @@ function Library:CreateWindow(hubName, toggleKey)
             Page.Visible = true
             TabBtn.TextColor3 = Theme.Text
             TabBtn.BackgroundColor3 = Theme.Background
-            ActiveTab = Page
             FirstTab = false
         end
 
         TabBtn.MouseButton1Click:Connect(function()
-            if SearchBar.Text ~= "" then return end -- Block tab switching during search
             for _, child in pairs(ContentArea:GetChildren()) do child.Visible = false end
             for _, child in pairs(Sidebar:GetChildren()) do
                 if child:IsA("TextButton") then child.TextColor3 = Theme.TextDark; child.BackgroundColor3 = Theme.Sidebar end
@@ -544,7 +381,6 @@ function Library:CreateWindow(hubName, toggleKey)
             Page.Visible = true
             TabBtn.TextColor3 = Theme.Text
             TabBtn.BackgroundColor3 = Theme.Background
-            ActiveTab = Page
         end)
 
         local Tab = {}
@@ -601,8 +437,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 function LabelObj:Set(newText)
                     Label.Text = newText
                 end
-                
-                Library.AllElements["Label:" .. text] = {Name = text, Instance = Label, Type = "Label", Set = LabelObj.Set}
                 return LabelObj
             end
             
@@ -639,8 +473,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 local bounds = PContent.TextBounds.Y
                 PContent.Size = UDim2.new(1, 0, 0, bounds)
                 ParaFrame.Size = UDim2.new(1, 0, 0, bounds + 22)
-                
-                Library.AllElements["Paragraph:" .. title] = {Name = title, Instance = PTitle, Type = "Paragraph"}
             end
 
             function Section:AddButton(btnText, callback)
@@ -661,8 +493,6 @@ function Library:CreateWindow(hubName, toggleKey)
                     task.wait(0.1)
                     TweenService:Create(Button, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Background}):Play()
                 end)
-                
-                Library.AllElements["Button:" .. btnText] = {Name = btnText, Instance = Button, Type = "Button", Callback = callback}
             end
 
             function Section:AddToggle(toggleText, default, flag, callback)
@@ -675,7 +505,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 ToggleFrame.Parent = SectionContainer
 
                 local Label = Instance.new("TextLabel")
-                Label.Name = "TextLabel" -- Added Name for easy search clone access
                 Label.Size = UDim2.new(1, -26, 1, 0)
                 Label.BackgroundTransparency = 1
                 Label.Text = toggleText
@@ -686,7 +515,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 Label.Parent = ToggleFrame
 
                 local Box = Instance.new("Frame")
-                Box.Name = "Box" -- Added Name for easy search clone access
                 Box.Size = UDim2.new(0, 16, 0, 16)
                 Box.Position = UDim2.new(1, -18, 0.5, -8)
                 Box.BackgroundColor3 = Theme.Background
@@ -695,7 +523,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 Box.Parent = ToggleFrame
 
                 local Indicator = Instance.new("Frame")
-                Indicator.Name = "Indicator" -- Added Name for easy search clone access
                 Indicator.Size = UDim2.new(1, -4, 1, -4)
                 Indicator.Position = UDim2.new(0, 2, 0, 2)
                 Indicator.BackgroundColor3 = Theme.Accent
@@ -707,7 +534,7 @@ function Library:CreateWindow(hubName, toggleKey)
                     toggled = state
                     Indicator.Visible = toggled
                     if flag then Library.Flags[flag] = toggled end
-                    pcall(callback, toggled) -- Use pcall to prevent crash from user error
+                    callback(toggled)
                 end
 
                 ToggleFrame.MouseButton1Click:Connect(function()
@@ -722,15 +549,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = toggled
                     end
                 end
-                
-                Library.AllElements["Toggle:" .. toggleText] = {
-                    Name = toggleText, 
-                    Instance = ToggleFrame, 
-                    Type = "Toggle", 
-                    Flag = flag,
-                    Default = default,
-                    Set = UpdateState
-                }
             end
 
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
@@ -743,7 +561,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 SliderFrame.Parent = SectionContainer
 
                 local Label = Instance.new("TextLabel")
-                Label.Name = "TextLabel"
                 Label.Size = UDim2.new(1, 0, 0, 16)
                 Label.BackgroundTransparency = 1
                 Label.Text = text .. ": " .. currentValue
@@ -773,10 +590,10 @@ function Library:CreateWindow(hubName, toggleKey)
                     currentValue = math.clamp(val, minVal, maxVal)
                     local currentRatio = (currentValue - minVal) / (maxVal - minVal)
                     Fill.Size = UDim2.new(currentRatio, 0, 1, 0)
-                    Label.Text = text .. ": " .. string.format("%.2f", currentValue) -- Format to 2 decimal places
+                    Label.Text = text .. ": " .. tostring(currentValue)
                     
                     if flag then Library.Flags[flag] = currentValue end
-                    pcall(callback, currentValue)
+                    callback(currentValue)
                 end
 
                 local dragging = false
@@ -815,15 +632,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = currentValue
                     end
                 end
-                
-                Library.AllElements["Slider:" .. text] = {
-                    Name = text, 
-                    Instance = SliderFrame, 
-                    Type = "Slider",
-                    Flag = flag,
-                    Default = initialVal,
-                    Set = SetValue
-                }
             end
 
             function Section:AddTextbox(placeholder, flag, callback)
@@ -835,7 +643,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 BoxFrame.Parent = SectionContainer
 
                 local TextBox = Instance.new("TextBox")
-                TextBox.Name = "TextBox" -- Added Name
                 TextBox.Size = UDim2.new(1, -8, 1, 0)
                 TextBox.Position = UDim2.new(0, 4, 0, 0)
                 TextBox.BackgroundTransparency = 1
@@ -851,7 +658,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local function SetText(txt)
                     TextBox.Text = txt
                     if flag then Library.Flags[flag] = txt end
-                    pcall(callback, txt)
+                    callback(txt)
                 end
                 
                 TextBox.FocusLost:Connect(function()
@@ -864,14 +671,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         SetText(Library.Flags[flag])
                     end
                 end
-                
-                Library.AllElements["Textbox:" .. placeholder] = {
-                    Name = placeholder, 
-                    Instance = BoxFrame, 
-                    Type = "Textbox", 
-                    Flag = flag,
-                    Set = SetText
-                }
             end
 
             function Section:AddDropdown(text, options, initialIndex, flag, callback)
@@ -924,7 +723,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local function SetOption(opt)
                     SelectButton.Text = opt
                     if flag then Library.Flags[flag] = opt end
-                    pcall(callback, opt)
+                    callback(opt)
                     
                     isExpanded = false
                     DropdownList.Visible = false
@@ -935,10 +734,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local function RefreshList()
                     for _, v in pairs(DropdownList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
                     
-                    local opts = (type(options) == "function" and pcall(options) and options()) or options -- Handle dynamic options
-                    if type(opts) ~= "table" then opts = {} end
-                    
-                    for i, option in ipairs(opts) do
+                    for i, option in ipairs(options) do
                         local ItemBtn = Instance.new("TextButton")
                         ItemBtn.Size = UDim2.new(1, 0, 0, 24)
                         ItemBtn.BackgroundColor3 = Theme.Section
@@ -955,17 +751,15 @@ function Library:CreateWindow(hubName, toggleKey)
                             SetOption(option)
                         end)
                     end
-                    DropdownList.CanvasSize = UDim2.new(0,0,0, #opts * 24)
+                    DropdownList.CanvasSize = UDim2.new(0,0,0, #options * 24)
                 end
                 
                 RefreshList()
-                SetOption(options[selectedIndex] or "...") -- Initial call to set value and trigger callback
-                
+
                 SelectButton.MouseButton1Click:Connect(function()
                     isExpanded = not isExpanded
                     DropdownList.Visible = isExpanded
                     if isExpanded then
-                        RefreshList() -- Refresh list every time it opens for dynamic lists
                         DropdownFrame.ZIndex = 60
                         local h = math.min(#options * 24, 120)
                         DropdownList.Size = UDim2.new(0.6, 0, 0, h)
@@ -992,17 +786,8 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = options[selectedIndex]
                     end
                 end
-                
-                Library.AllElements["Dropdown:" .. text] = {
-                    Name = text, 
-                    Instance = DropdownFrame, 
-                    Type = "Dropdown",
-                    Flag = flag,
-                    Set = function(val) SetOption(val) end
-                }
             end
             
-            -- NEW UI ELEMENT: ColorPicker
             function Section:AddColorPicker(text, defaultColor, flag, callback)
                 local default = defaultColor or Color3.fromRGB(255, 255, 255)
                 local colorH, colorS, colorV = default:ToHSV()
@@ -1046,7 +831,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 SV_Map.Size = UDim2.new(0, 100, 0, 100)
                 SV_Map.Position = UDim2.new(0, 10, 0, 10)
                 SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
-                SV_Map.Image = "rbxassetid://4155801252" -- Saturation/Value map image asset
+                SV_Map.Image = "rbxassetid://4155801252"
                 SV_Map.BorderSizePixel = 0
                 SV_Map.AutoButtonColor = false
                 SV_Map.Parent = CP_Container
@@ -1097,9 +882,10 @@ function Library:CreateWindow(hubName, toggleKey)
                     SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
                     
                     if flag then Library.Flags[flag] = currentColor end
-                    pcall(callback, currentColor)
+                    callback(currentColor)
                 end
                 
+                --// UNIVERSAL INPUT HANDLER (Mobile + PC)
                 local draggingSV, draggingHue = false, false
                 
                 local function UpdateSV(input)
@@ -1154,41 +940,26 @@ function Library:CreateWindow(hubName, toggleKey)
                 ColorBtn.MouseButton1Click:Connect(function()
                     open = not open
                     CP_Container.Visible = open
-                    -- Resize the parent section to fit the picker
-                    local sectionLayout = SectionContainer:FindFirstChildOfClass("UIListLayout")
-                    if sectionLayout then
-                         sectionLayout.Parent:GetPropertyChangedSignal("AbsoluteContentSize"):Fire()
-                    end
                 end)
                 
-                local function SetColorFromConfig(col)
-                    if not col then return end
-                    local c = typeof(col) == "table" and Color3.new(col.R, col.G, col.B) or col
-                    colorH, colorS, colorV = c:ToHSV()
-                    currentColor = c
-                    SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
-                    Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
-                    UpdateColorPicker()
-                end
-                
                 if flag then
-                    Library.ConfigObjects[flag] = {Type = "Color", Set = SetColorFromConfig}
+                    Library.ConfigObjects[flag] = {Type = "Color", Set = function(col) 
+                        if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        colorH, colorS, colorV = col:ToHSV()
+                        currentColor = col
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                        UpdateColorPicker()
+                    end}
                     if Library.Flags[flag] ~= nil then
-                        SetColorFromConfig(Library.Flags[flag])
-                    else
-                        Library.Flags[flag] = currentColor
+                        local col = Library.Flags[flag]
+                         if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        colorH, colorS, colorV = col:ToHSV()
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                        UpdateColorPicker()
                     end
-                else
-                    SetColorFromConfig(currentColor)
                 end
-                
-                Library.AllElements["ColorPicker:" .. text] = {
-                    Name = text, 
-                    Instance = PickerFrame, 
-                    Type = "ColorPicker",
-                    Flag = flag,
-                    Set = SetColorFromConfig
-                }
             end
 
             function Section:AddKeybind(text, initialKey, flag, callback)
@@ -1216,17 +987,13 @@ function Library:CreateWindow(hubName, toggleKey)
                 
                 local listening = false
                 KeybindBtn.MouseButton1Click:Connect(function()
-                    if listening then 
-                        listening = false
-                        KeybindBtn.Text = text .. ": [" .. currentKey.Name .. "]"
-                        return 
-                    end
+                    if listening then return end
                     listening = true
                     KeybindBtn.Text = text .. ": [...]"
                     
                     local connection
                     connection = UserInputService.InputBegan:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
+                        if input.UserInputType == Enum.UserInputType.Keyboard then
                             SetKey(input.KeyCode)
                             listening = false
                             connection:Disconnect()
@@ -1244,14 +1011,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 else
                     SetKey(currentKey)
                 end
-                
-                Library.AllElements["Keybind:" .. text] = {
-                    Name = text, 
-                    Instance = KeybindBtn, 
-                    Type = "Keybind",
-                    Flag = flag,
-                    Set = SetKey
-                }
             end
             
             return Section
@@ -1264,42 +1023,44 @@ function Library:CreateWindow(hubName, toggleKey)
     local ConfigSection = SettingsTab:AddSection("Configuration")
     
     local ConfigName = ""
-    
-    -- Config Name Textbox
     ConfigSection:AddTextbox("Config Name", nil, function(txt)
         ConfigName = txt
     end)
     
-    -- Save Button
     ConfigSection:AddButton("Save Config", function()
         if ConfigName ~= "" then
             SaveConfiguration(ConfigName)
-        else
-            Library:Notify("Configuration", "Please enter a config name.", 3)
+            Library:Notify("Configuration", "Saved config: " .. ConfigName, 3)
         end
     end)
     
-    -- Load Button
     ConfigSection:AddButton("Load Config", function()
         if ConfigName ~= "" then
             LoadConfiguration(ConfigName)
-        else
-            Library:Notify("Configuration", "Please enter a config name.", 3)
+            Library:Notify("Configuration", "Loaded config: " .. ConfigName, 3)
         end
     end)
     
-    -- Config List Dropdown (Auto-scans folder)
-    local configDropdown = ConfigSection:AddDropdown("Config List", RefreshConfigList, 1, nil, function(val)
+    local ConfigList = {}
+    local function RefreshConfigs()
+        ConfigList = {}
+        if isfolder(ConfigFolder) then
+            for _, file in ipairs(listfiles(ConfigFolder)) do
+                if file:sub(-#ConfigExtension) == ConfigExtension then
+                    local name = file:gsub(ConfigFolder.."/", ""):gsub(ConfigExtension, "")
+                    table.insert(ConfigList, name)
+                end
+            end
+        end
+        return ConfigList
+    end
+    
+    ConfigSection:AddDropdown("Config List", RefreshConfigs(), 1, nil, function(val)
         ConfigName = val
     end)
 
-    -- Refresh List Button
     ConfigSection:AddButton("Refresh Config List", function()
-       local newConfigs = RefreshConfigList()
-       if configDropdown.Refresh then
-            configDropdown.Refresh(newConfigs)
-       end
-       Library:Notify("System", "Refreshed config list. Selected: " .. ConfigName, 3)
+       Library:Notify("System", "Refreshed list (Reload UI to see changes)", 2)
     end)
 
     return Window
