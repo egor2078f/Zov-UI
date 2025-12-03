@@ -32,8 +32,6 @@ local Theme = {
 local Library = {
     Flags = {},
     ConfigObjects = {},
-    SearchableElements = {}, -- Для умного поиска
-    Tabs = {}, -- Хранение табов
     Open = true,
     AccentColor = Theme.Accent,
     Keybind = Enum.KeyCode.RightControl
@@ -62,40 +60,27 @@ local function SaveConfiguration(name)
         end
     end
     writefile(GetConfigName(name), HttpService:JSONEncode(Data))
-    Library:Notify("Config", "Configuration '"..name.."' saved successfully.", 3)
 end
 
 local function LoadConfiguration(name)
-    if not isfile(GetConfigName(name)) then 
-        Library:Notify("Config", "File not found!", 2)
-        return 
-    end
+    if not isfile(GetConfigName(name)) then return end
     
-    local success, Content = pcall(readfile, GetConfigName(name))
-    if not success then return end
-
+    local Content = readfile(GetConfigName(name))
     local Data = HttpService:JSONDecode(Content)
     
     for flag, value in pairs(Data) do
-        local finalValue = value
-        
-        -- Конвертация типов данных
         if type(value) == "table" and value.Type == "Color" then
-            finalValue = Color3.new(value.R, value.G, value.B)
+            Library.Flags[flag] = Color3.new(value.R, value.G, value.B)
         elseif type(value) == "table" and value.Type == "Keybind" then
-            finalValue = Enum.KeyCode[value.Name]
+            Library.Flags[flag] = Enum.KeyCode[value.Name]
+        else
+            Library.Flags[flag] = value
         end
-
-        Library.Flags[flag] = finalValue
         
-        -- Обновление UI и вызов колбэков
         if Library.ConfigObjects[flag] then
-            pcall(function()
-                Library.ConfigObjects[flag]:Set(finalValue)
-            end)
+            Library.ConfigObjects[flag]:Set(Library.Flags[flag])
         end
     end
-    Library:Notify("Config", "Configuration loaded.", 3)
 end
 
 local function MakeDraggable(topbarobject, object)
@@ -287,7 +272,7 @@ function Library:CreateWindow(hubName, toggleKey)
     SearchBar.BackgroundColor3 = Theme.Background
     SearchBar.BorderColor3 = Theme.Border
     SearchBar.BorderSizePixel = 1
-    SearchBar.PlaceholderText = "Search Function..."
+    SearchBar.PlaceholderText = "Search Tab..."
     SearchBar.Text = ""
     SearchBar.TextColor3 = Theme.Text
     SearchBar.PlaceholderColor3 = Theme.TextDark
@@ -315,72 +300,32 @@ function Library:CreateWindow(hubName, toggleKey)
     ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
 
-    --// Smart Search Logic
-    local function UpdateSearch(text)
-        text = text:lower()
-        
-        -- Скрываем все страницы сначала
-        if text ~= "" then
-            for _, item in pairs(Library.SearchableElements) do
-                if string.find(item.Name:lower(), text) then
-                    item.Object.Visible = true
-                    item.ParentSection.Visible = true
-                else
-                    item.Object.Visible = false
-                end
-            end
-
-            -- Проверяем секции на наличие видимых элементов
-            for _, tabData in pairs(Library.Tabs) do
-                local anyVisible = false
-                for _, section in pairs(tabData.Sections) do
-                    local sectionHasVisible = false
-                    for _, child in pairs(section.Container:GetChildren()) do
-                        if child:IsA("Frame") or child:IsA("TextButton") or child:IsA("TextLabel") then
-                            if child.Visible and not child:IsA("UIListLayout") and not child:IsA("UIPadding") and child.Name ~= "SectionTitle" then
-                                sectionHasVisible = true
-                            end
-                        end
-                    end
-                    section.Container.Visible = sectionHasVisible
-                    if sectionHasVisible then anyVisible = true end
-                end
-                
-                -- Если в табе есть результаты поиска, переключаемся на него визуально (опционально) или просто показываем кнопку
-                -- В данном дизайне мы оставляем пользователя на текущем табе, но поиск фильтрует элементы
-                -- Для лучшего UX, поиск должен открывать все табы, где есть совпадения?
-                -- Реализуем так: Поиск фильтрует элементы ТЕКУЩЕГО таба или ищет глобально?
-                -- Промпт: "измени поиск вместо табов на функции умная система"
-                -- Глобальный поиск:
-                if anyVisible then
-                    tabData.Btn.Visible = true
-                else
-                    tabData.Btn.Visible = false
-                end
-            end
-        else
-            -- Сброс поиска
-            for _, item in pairs(Library.SearchableElements) do
-                item.Object.Visible = true
-                item.ParentSection.Visible = true
-            end
-            for _, tabData in pairs(Library.Tabs) do
-                tabData.Btn.Visible = true
-                for _, section in pairs(tabData.Sections) do
-                    section.Container.Visible = true
-                end
-            end
-        end
-    end
-
-    SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
-        UpdateSearch(SearchBar.Text)
-    end)
-
     UserInputService.InputBegan:Connect(function(input, gp)
         if gp then return end
         if input.KeyCode == Library.Keybind then
             ToggleUI()
+        end
+    end)
+
+    UserInputService.InputBegan:Connect(function(input, gp)
+        if gp or not Library.Open then return end
+        for key, callback in pairs(CurrentKeybinds) do
+            if input.KeyCode == key then
+                callback()
+            end
+        end
+    end)
+
+    local TabButtons = {} 
+    
+    SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = SearchBar.Text:lower()
+        for _, btn in pairs(TabButtons) do
+            if text == "" or btn.Text:lower():find(text) then
+                btn.Visible = true
+            else
+                btn.Visible = false
+            end
         end
     end)
 
@@ -398,6 +343,8 @@ function Library:CreateWindow(hubName, toggleKey)
         TabBtn.BorderSizePixel = 0
         TabBtn.Parent = Sidebar
         
+        table.insert(TabButtons, TabBtn)
+
         local Page = Instance.new("ScrollingFrame")
         Page.Size = UDim2.new(1, -4, 1, 0)
         Page.Position = UDim2.new(0, 4, 0, 0)
@@ -419,13 +366,6 @@ function Library:CreateWindow(hubName, toggleKey)
         PagePad.PaddingRight = UDim.new(0, 4)
         PagePad.Parent = Page
 
-        local TabData = {
-            Btn = TabBtn,
-            Page = Page,
-            Sections = {}
-        }
-        table.insert(Library.Tabs, TabData)
-
         if FirstTab then
             Page.Visible = true
             TabBtn.TextColor3 = Theme.Text
@@ -441,9 +381,6 @@ function Library:CreateWindow(hubName, toggleKey)
             Page.Visible = true
             TabBtn.TextColor3 = Theme.Text
             TabBtn.BackgroundColor3 = Theme.Background
-            
-            -- Очистка поиска при смене таба для удобства
-            -- SearchBar.Text = "" 
         end)
 
         local Tab = {}
@@ -456,10 +393,7 @@ function Library:CreateWindow(hubName, toggleKey)
             SectionContainer.BorderSizePixel = 1
             SectionContainer.Parent = Page
 
-            table.insert(TabData.Sections, {Container = SectionContainer})
-
             local SectionTitle = Instance.new("TextLabel")
-            SectionTitle.Name = "SectionTitle"
             SectionTitle.Size = UDim2.new(1, -10, 0, 20)
             SectionTitle.Position = UDim2.new(0, 5, 0, 2)
             SectionTitle.BackgroundTransparency = 1
@@ -488,15 +422,6 @@ function Library:CreateWindow(hubName, toggleKey)
 
             local Section = {}
 
-            -- Register for search
-            local function AddToSearch(name, object)
-                table.insert(Library.SearchableElements, {
-                    Name = name,
-                    Object = object,
-                    ParentSection = SectionContainer
-                })
-            end
-
             function Section:AddLabel(text)
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(1, 0, 0, 20)
@@ -508,8 +433,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 Label.TextXAlignment = Enum.TextXAlignment.Left
                 Label.Parent = SectionContainer
                 
-                AddToSearch(text, Label)
-
                 local LabelObj = {}
                 function LabelObj:Set(newText)
                     Label.Text = newText
@@ -550,8 +473,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 local bounds = PContent.TextBounds.Y
                 PContent.Size = UDim2.new(1, 0, 0, bounds)
                 ParaFrame.Size = UDim2.new(1, 0, 0, bounds + 22)
-                
-                AddToSearch(title, ParaFrame)
             end
 
             function Section:AddButton(btnText, callback)
@@ -572,8 +493,6 @@ function Library:CreateWindow(hubName, toggleKey)
                     task.wait(0.1)
                     TweenService:Create(Button, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Background}):Play()
                 end)
-                
-                AddToSearch(btnText, Button)
             end
 
             function Section:AddToggle(toggleText, default, flag, callback)
@@ -630,8 +549,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = toggled
                     end
                 end
-                
-                AddToSearch(toggleText, ToggleFrame)
             end
 
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
@@ -715,8 +632,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = currentValue
                     end
                 end
-                
-                AddToSearch(text, SliderFrame)
             end
 
             function Section:AddTextbox(placeholder, flag, callback)
@@ -756,8 +671,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         SetText(Library.Flags[flag])
                     end
                 end
-                
-                AddToSearch(placeholder, BoxFrame)
             end
 
             function Section:AddDropdown(text, options, initialIndex, flag, callback)
@@ -873,312 +786,281 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = options[selectedIndex]
                     end
                 end
-                
-                AddToSearch(text, DropdownFrame)
             end
             
-            --// Исправленный и полный ColorPicker
             function Section:AddColorPicker(text, defaultColor, flag, callback)
                 local default = defaultColor or Color3.fromRGB(255, 255, 255)
-                local h, s, v = default:ToHSV()
-                local toggled = false
+                local colorH, colorS, colorV = default:ToHSV()
+                local currentColor = default
                 
-                local ColorFrame = Instance.new("Frame")
-                ColorFrame.Size = UDim2.new(1, 0, 0, 26)
-                ColorFrame.BackgroundTransparency = 1
-                ColorFrame.ZIndex = 20
-                ColorFrame.Parent = SectionContainer
+                local PickerFrame = Instance.new("Frame")
+                PickerFrame.Size = UDim2.new(1, 0, 0, 26)
+                PickerFrame.BackgroundTransparency = 1
+                PickerFrame.Parent = SectionContainer
                 
                 local Label = Instance.new("TextLabel")
-                Label.Size = UDim2.new(1, -45, 1, 0)
+                Label.Size = UDim2.new(1, -40, 1, 0)
                 Label.BackgroundTransparency = 1
                 Label.Text = text
                 Label.TextColor3 = Theme.Text
                 Label.Font = Enum.Font.Gotham
                 Label.TextSize = 12
                 Label.TextXAlignment = Enum.TextXAlignment.Left
-                Label.Parent = ColorFrame
+                Label.Parent = PickerFrame
                 
-                local Preview = Instance.new("TextButton")
-                Preview.Size = UDim2.new(0, 40, 0, 20)
-                Preview.Position = UDim2.new(1, -40, 0, 3)
-                Preview.BackgroundColor3 = default
-                Preview.BorderColor3 = Theme.Border
-                Preview.BorderSizePixel = 1
-                Preview.Text = ""
-                Preview.Parent = ColorFrame
+                local ColorBtn = Instance.new("TextButton")
+                ColorBtn.Size = UDim2.new(0, 30, 0, 18)
+                ColorBtn.Position = UDim2.new(1, -30, 0.5, -9)
+                ColorBtn.BackgroundColor3 = currentColor
+                ColorBtn.BorderColor3 = Theme.Border
+                ColorBtn.BorderSizePixel = 1
+                ColorBtn.Text = ""
+                ColorBtn.Parent = PickerFrame
                 
-                -- Picker Popup
-                local PickerContainer = Instance.new("Frame")
-                PickerContainer.Size = UDim2.new(1, 0, 0, 150)
-                PickerContainer.Position = UDim2.new(0, 0, 1, 5)
-                PickerContainer.BackgroundColor3 = Theme.Section
-                PickerContainer.BorderColor3 = Theme.Border
-                PickerContainer.BorderSizePixel = 1
-                PickerContainer.Visible = false
-                PickerContainer.ZIndex = 30
-                PickerContainer.Parent = ColorFrame
+                local CP_Container = Instance.new("Frame")
+                CP_Container.Size = UDim2.new(1, 0, 0, 130)
+                CP_Container.BackgroundColor3 = Theme.Section
+                CP_Container.BorderColor3 = Theme.Border
+                CP_Container.BorderSizePixel = 1
+                CP_Container.Visible = false
+                CP_Container.ClipsDescendants = true
+                CP_Container.Parent = SectionContainer
+                CP_Container.ZIndex = 5 
                 
-                local SVImage = Instance.new("ImageLabel")
-                SVImage.Size = UDim2.new(0, 130, 0, 130)
-                SVImage.Position = UDim2.new(0, 10, 0, 10)
-                SVImage.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                SVImage.Image = "rbxassetid://4155801252" -- Saturation/Value gradient
-                SVImage.BorderSizePixel = 0
-                SVImage.ZIndex = 31
-                SVImage.Parent = PickerContainer
+                local SV_Map = Instance.new("ImageButton")
+                SV_Map.Size = UDim2.new(0, 100, 0, 100)
+                SV_Map.Position = UDim2.new(0, 10, 0, 10)
+                SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
+                SV_Map.Image = "rbxassetid://4155801252"
+                SV_Map.BorderSizePixel = 0
+                SV_Map.AutoButtonColor = false
+                SV_Map.Parent = CP_Container
+                SV_Map.ZIndex = 6
                 
-                local SVICon = Instance.new("Frame")
-                SVICon.Size = UDim2.new(0, 4, 0, 4)
-                SVICon.BackgroundColor3 = Color3.new(1,1,1)
-                SVICon.BorderColor3 = Color3.new(0,0,0)
-                SVICon.ZIndex = 32
-                SVICon.Parent = SVImage
-                
-                local HueBar = Instance.new("ImageLabel")
-                HueBar.Size = UDim2.new(0, 20, 0, 130)
-                HueBar.Position = UDim2.new(0, 150, 0, 10)
-                HueBar.Image = "rbxassetid://4155801252" -- Placeholder, usually need hue map
-                -- Replace with UIGradient for Hue
-                HueBar.Image = ""
-                HueBar.BackgroundColor3 = Color3.new(1,1,1)
-                HueBar.BorderSizePixel = 0
-                HueBar.ZIndex = 31
-                HueBar.Parent = PickerContainer
-                
-                local HueGradient = Instance.new("UIGradient")
-                HueGradient.Rotation = 90
-                HueGradient.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
-                    ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
-                    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
-                    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
-                    ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
-                    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
-                    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
-                })
-                HueGradient.Parent = HueBar
-                
-                local HueSlider = Instance.new("Frame")
-                HueSlider.Size = UDim2.new(1, 0, 0, 2)
-                HueSlider.BackgroundColor3 = Color3.new(1,1,1)
-                HueSlider.BorderColor3 = Color3.new(0,0,0)
-                HueSlider.ZIndex = 32
-                HueSlider.Parent = HueBar
+                local SV_Cursor = Instance.new("Frame")
+                SV_Cursor.Size = UDim2.new(0, 4, 0, 4)
+                SV_Cursor.AnchorPoint = Vector2.new(0.5, 0.5)
+                SV_Cursor.BackgroundColor3 = Color3.new(1,1,1)
+                SV_Cursor.BorderColor3 = Color3.new(0,0,0)
+                SV_Cursor.Parent = SV_Map
+                SV_Cursor.ZIndex = 7
+                SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
 
-                local function UpdateColor()
-                    local color = Color3.fromHSV(h, s, v)
-                    Preview.BackgroundColor3 = color
-                    SVImage.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+                local Hue_Bar = Instance.new("ImageButton")
+                Hue_Bar.Size = UDim2.new(0, 20, 0, 100)
+                Hue_Bar.Position = UDim2.new(0, 120, 0, 10)
+                Hue_Bar.BackgroundColor3 = Color3.new(1,1,1)
+                Hue_Bar.BorderSizePixel = 0
+                Hue_Bar.AutoButtonColor = false
+                Hue_Bar.Parent = CP_Container
+                Hue_Bar.ZIndex = 6
+                
+                local UIGradient = Instance.new("UIGradient")
+                UIGradient.Rotation = 90
+                UIGradient.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)), 
+                    ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255,255,0)), 
+                    ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0,255,0)), 
+                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0,255,255)), 
+                    ColorSequenceKeypoint.new(0.667, Color3.fromRGB(0,0,255)), 
+                    ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255,0,255)), 
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,0))
+                }
+                UIGradient.Parent = Hue_Bar
+                
+                local Hue_Cursor = Instance.new("Frame")
+                Hue_Cursor.Size = UDim2.new(1, 0, 0, 2)
+                Hue_Cursor.BackgroundColor3 = Color3.new(1,1,1)
+                Hue_Cursor.BorderColor3 = Color3.new(0,0,0)
+                Hue_Cursor.Parent = Hue_Bar
+                Hue_Cursor.ZIndex = 7
+                Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                
+                local function UpdateColorPicker()
+                    currentColor = Color3.fromHSV(colorH, colorS, colorV)
+                    ColorBtn.BackgroundColor3 = currentColor
+                    SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
                     
-                    if flag then Library.Flags[flag] = color end
-                    callback(color)
+                    if flag then Library.Flags[flag] = currentColor end
+                    callback(currentColor)
                 end
                 
-                local function SetFull(newC)
-                    local nh, ns, nv = newC:ToHSV()
-                    h, s, v = nh, ns, nv
-                    -- Update pointers
-                    HueSlider.Position = UDim2.new(0, 0, 1 - h, 0)
-                    SVICon.Position = UDim2.new(s, -2, 1 - v, -2)
-                    UpdateColor()
+                --// UNIVERSAL INPUT HANDLER (Mobile + PC)
+                local draggingSV, draggingHue = false, false
+                
+                local function UpdateSV(input)
+                    local rX = math.clamp(input.Position.X - SV_Map.AbsolutePosition.X, 0, SV_Map.AbsoluteSize.X)
+                    local rY = math.clamp(input.Position.Y - SV_Map.AbsolutePosition.Y, 0, SV_Map.AbsoluteSize.Y)
+                    
+                    colorS = rX / SV_Map.AbsoluteSize.X
+                    colorV = 1 - (rY / SV_Map.AbsoluteSize.Y)
+                    
+                    SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                    UpdateColorPicker()
+                end
+                
+                local function UpdateHue(input)
+                    local rY = math.clamp(input.Position.Y - Hue_Bar.AbsolutePosition.Y, 0, Hue_Bar.AbsoluteSize.Y)
+                    colorH = rY / Hue_Bar.AbsoluteSize.Y
+                    
+                    Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                    UpdateColorPicker()
                 end
 
-                local draggingHue, draggingSV = false, false
-                
-                HueBar.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingHue = true end
+                SV_Map.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        draggingSV = true
+                        UpdateSV(input)
+                    end
                 end)
                 
-                SVImage.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSV = true end
-                end)
-                
-                UserInputService.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
-                        draggingHue = false
-                        draggingSV = false
+                Hue_Bar.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        draggingHue = true
+                        UpdateHue(input)
                     end
                 end)
                 
                 UserInputService.InputChanged:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseMovement then
-                        if draggingHue then
-                            local y = math.clamp((input.Position.Y - HueBar.AbsolutePosition.Y) / HueBar.AbsoluteSize.Y, 0, 1)
-                            h = 1 - y
-                            HueSlider.Position = UDim2.new(0, 0, y, 0)
-                            UpdateColor()
-                        elseif draggingSV then
-                            local x = math.clamp((input.Position.X - SVImage.AbsolutePosition.X) / SVImage.AbsoluteSize.X, 0, 1)
-                            local y = math.clamp((input.Position.Y - SVImage.AbsolutePosition.Y) / SVImage.AbsoluteSize.Y, 0, 1)
-                            s = x
-                            v = 1 - y
-                            SVICon.Position = UDim2.new(s, -2, 1 - v, -2)
-                            UpdateColor()
-                        end
+                    if draggingSV and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        UpdateSV(input)
+                    elseif draggingHue and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        UpdateHue(input)
                     end
                 end)
                 
-                Preview.MouseButton1Click:Connect(function()
-                    toggled = not toggled
-                    PickerContainer.Visible = toggled
-                    if toggled then
-                        ColorFrame.ZIndex = 60
-                        ColorFrame.Size = UDim2.new(1, 0, 0, 180)
-                    else
-                        ColorFrame.ZIndex = 20
-                        ColorFrame.Size = UDim2.new(1, 0, 0, 26)
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        draggingSV = false
+                        draggingHue = false
                     end
+                end)
+                
+                local open = false
+                ColorBtn.MouseButton1Click:Connect(function()
+                    open = not open
+                    CP_Container.Visible = open
                 end)
                 
                 if flag then
-                    Library.ConfigObjects[flag] = {
-                        Type = "Color", 
-                        Set = function(c) SetFull(c) end
-                    }
-                    if Library.Flags[flag] then
-                        SetFull(Library.Flags[flag])
-                    else
-                        Library.Flags[flag] = default
+                    Library.ConfigObjects[flag] = {Type = "Color", Set = function(col) 
+                        if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        colorH, colorS, colorV = col:ToHSV()
+                        currentColor = col
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                        UpdateColorPicker()
+                    end}
+                    if Library.Flags[flag] ~= nil then
+                        local col = Library.Flags[flag]
+                         if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        colorH, colorS, colorV = col:ToHSV()
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                        UpdateColorPicker()
                     end
                 end
-                
-                AddToSearch(text, ColorFrame)
-            end
-            
-            --// Новый элемент UI: Кейбинд (Keybind Recorder)
-            function Section:AddKeybind(text, defaultKey, flag, callback)
-                local currentKey = defaultKey or Enum.KeyCode.RightControl
-                local binding = false
-                
-                local BindFrame = Instance.new("Frame")
-                BindFrame.Size = UDim2.new(1, 0, 0, 26)
-                BindFrame.BackgroundTransparency = 1
-                BindFrame.Parent = SectionContainer
-                
-                local Label = Instance.new("TextLabel")
-                Label.Size = UDim2.new(1, -80, 1, 0)
-                Label.BackgroundTransparency = 1
-                Label.Text = text
-                Label.TextColor3 = Theme.Text
-                Label.Font = Enum.Font.Gotham
-                Label.TextSize = 12
-                Label.TextXAlignment = Enum.TextXAlignment.Left
-                Label.Parent = BindFrame
-                
-                local BindBtn = Instance.new("TextButton")
-                BindBtn.Size = UDim2.new(0, 70, 0, 20)
-                BindBtn.Position = UDim2.new(1, -75, 0, 3)
-                BindBtn.BackgroundColor3 = Theme.Background
-                BindBtn.BorderColor3 = Theme.Border
-                BindBtn.BorderSizePixel = 1
-                BindBtn.Text = currentKey.Name
-                BindBtn.TextColor3 = Theme.Accent
-                BindBtn.Font = Enum.Font.Code
-                BindBtn.TextSize = 12
-                BindBtn.Parent = BindFrame
-                
-                local function SetKey(key)
-                    currentKey = key
-                    BindBtn.Text = key.Name
-                    if flag then Library.Flags[flag] = key end
-                    
-                    -- Удаляем старый бинд из таблицы активных, если callback есть
-                    if callback then
-                        -- Сначала очистим старую ссылку (простая логика)
-                        -- В идеале тут нужен менеджер биндов, но сделаем локально
-                        if CurrentKeybinds[text] then
-                             CurrentKeybinds[text] = nil
-                        end
-                        -- Добавляем в глобальный листенер
-                        CurrentKeybinds[text] = {Key = key, Callback = callback}
-                    end
-                end
-                
-                BindBtn.MouseButton1Click:Connect(function()
-                    binding = true
-                    BindBtn.Text = "..."
-                end)
-                
-                UserInputService.InputBegan:Connect(function(input)
-                    if binding and input.UserInputType == Enum.UserInputType.Keyboard then
-                        binding = false
-                        SetKey(input.KeyCode)
-                    elseif not binding and callback and input.KeyCode == currentKey then
-                        callback()
-                    end
-                end)
-                
-                if flag then
-                    Library.ConfigObjects[flag] = {
-                        Type = "Keybind",
-                        Set = function(k) SetKey(k) end
-                    }
-                    if Library.Flags[flag] then
-                        SetKey(Library.Flags[flag])
-                    else
-                        Library.Flags[flag] = currentKey
-                    end
-                end
-                
-                AddToSearch(text, BindFrame)
             end
 
+            function Section:AddKeybind(text, initialKey, flag, callback)
+                local currentKey = initialKey or Enum.KeyCode.RightShift
+                
+                local KeybindBtn = Instance.new("TextButton")
+                KeybindBtn.Size = UDim2.new(1, 0, 0, 26)
+                KeybindBtn.BackgroundColor3 = Theme.Background
+                KeybindBtn.BorderColor3 = Theme.Border
+                KeybindBtn.BorderSizePixel = 1
+                KeybindBtn.Text = text .. ": [" .. currentKey.Name .. "]"
+                KeybindBtn.TextColor3 = Theme.Text
+                KeybindBtn.Font = Enum.Font.Code
+                KeybindBtn.TextSize = 12
+                KeybindBtn.Parent = SectionContainer
+                
+                local function SetKey(key)
+                    if CurrentKeybinds[currentKey] then CurrentKeybinds[currentKey] = nil end
+                    currentKey = key
+                    CurrentKeybinds[currentKey] = callback
+                    KeybindBtn.Text = text .. ": [" .. currentKey.Name .. "]"
+                    
+                    if flag then Library.Flags[flag] = currentKey end
+                end
+                
+                local listening = false
+                KeybindBtn.MouseButton1Click:Connect(function()
+                    if listening then return end
+                    listening = true
+                    KeybindBtn.Text = text .. ": [...]"
+                    
+                    local connection
+                    connection = UserInputService.InputBegan:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.Keyboard then
+                            SetKey(input.KeyCode)
+                            listening = false
+                            connection:Disconnect()
+                        end
+                    end)
+                end)
+                
+                if flag then
+                    Library.ConfigObjects[flag] = {Type = "Keybind", Set = SetKey}
+                    if Library.Flags[flag] ~= nil then
+                        SetKey(Library.Flags[flag])
+                    else
+                        SetKey(currentKey)
+                    end
+                else
+                    SetKey(currentKey)
+                end
+            end
+            
             return Section
         end
         return Tab
     end
-    
-    --// Автоматическое создание вкладки настроек (Swiss Watch Configs)
+
+    --// Settings Tab Logic
     local SettingsTab = Window:AddTab("Settings")
     local ConfigSection = SettingsTab:AddSection("Configuration")
     
     local ConfigName = ""
-    ConfigSection:AddTextbox("Config Name", nil, function(v)
-        ConfigName = v
+    ConfigSection:AddTextbox("Config Name", nil, function(txt)
+        ConfigName = txt
     end)
     
     ConfigSection:AddButton("Save Config", function()
         if ConfigName ~= "" then
             SaveConfiguration(ConfigName)
-        else
-            Library:Notify("Error", "Please enter a config name!", 2)
+            Library:Notify("Configuration", "Saved config: " .. ConfigName, 3)
         end
     end)
     
     ConfigSection:AddButton("Load Config", function()
         if ConfigName ~= "" then
             LoadConfiguration(ConfigName)
-        else
-            Library:Notify("Error", "Please enter a config name!", 2)
+            Library:Notify("Configuration", "Loaded config: " .. ConfigName, 3)
         end
     end)
     
-    -- Список конфигов
     local ConfigList = {}
-    if isfolder(ConfigFolder) then
-        for _, file in ipairs(listfiles(ConfigFolder)) do
-            if file:sub(-#ConfigExtension) == ConfigExtension then
-                local name = file:match("([^/\\]+)" .. ConfigExtension .. "$")
-                table.insert(ConfigList, name)
+    local function RefreshConfigs()
+        ConfigList = {}
+        if isfolder(ConfigFolder) then
+            for _, file in ipairs(listfiles(ConfigFolder)) do
+                if file:sub(-#ConfigExtension) == ConfigExtension then
+                    local name = file:gsub(ConfigFolder.."/", ""):gsub(ConfigExtension, "")
+                    table.insert(ConfigList, name)
+                end
             end
         end
+        return ConfigList
     end
     
-    ConfigSection:AddDropdown("Available Configs", ConfigList, 1, nil, function(val)
+    ConfigSection:AddDropdown("Config List", RefreshConfigs(), 1, nil, function(val)
         ConfigName = val
     end)
-    
+
     ConfigSection:AddButton("Refresh Config List", function()
-        ConfigList = {}
-        for _, file in ipairs(listfiles(ConfigFolder)) do
-            if file:sub(-#ConfigExtension) == ConfigExtension then
-                local name = file:match("([^/\\]+)" .. ConfigExtension .. "$")
-                table.insert(ConfigList, name)
-            end
-        end
-        -- Here we would need to refresh the dropdown, but simplistic impl for now just relies on clicking
-        Library:Notify("Config", "List refreshed (re-open UI)", 2)
+       Library:Notify("System", "Refreshed list (Reload UI to see changes)", 2)
     end)
 
     return Window
