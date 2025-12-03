@@ -59,28 +59,59 @@ local function SaveConfiguration(name)
             Data[flag] = value
         end
     end
-    writefile(GetConfigName(name), HttpService:JSONEncode(Data))
+    
+    local success, err = pcall(function()
+        writefile(GetConfigName(name), HttpService:JSONEncode(Data))
+    end)
+    
+    if not success then
+        warn("Failed to save config: " .. tostring(err))
+        return false
+    end
+    return true
 end
 
 local function LoadConfiguration(name)
-    if not isfile(GetConfigName(name)) then return end
+    local configPath = GetConfigName(name)
     
-    local Content = readfile(GetConfigName(name))
-    local Data = HttpService:JSONDecode(Content)
+    if not isfile(configPath) then 
+        warn("Config file not found: " .. configPath)
+        return false
+    end
+    
+    local success, result = pcall(function()
+        local Content = readfile(configPath)
+        return HttpService:JSONDecode(Content)
+    end)
+    
+    if not success then
+        warn("Failed to load config: " .. tostring(result))
+        return false
+    end
+    
+    local Data = result
     
     for flag, value in pairs(Data) do
-        if type(value) == "table" and value.Type == "Color" then
-            Library.Flags[flag] = Color3.new(value.R, value.G, value.B)
-        elseif type(value) == "table" and value.Type == "Keybind" then
-            Library.Flags[flag] = Enum.KeyCode[value.Name]
-        else
-            Library.Flags[flag] = value
+        local finalValue = value
+        
+        if type(value) == "table" then
+            if value.Type == "Color" then
+                finalValue = Color3.new(value.R, value.G, value.B)
+            elseif value.Type == "Keybind" then
+                finalValue = Enum.KeyCode[value.Name] or Enum.KeyCode.RightShift
+            end
         end
         
-        if Library.ConfigObjects[flag] then
-            Library.ConfigObjects[flag]:Set(Library.Flags[flag])
+        Library.Flags[flag] = finalValue
+        
+        if Library.ConfigObjects[flag] and Library.ConfigObjects[flag].Set then
+            pcall(function()
+                Library.ConfigObjects[flag]:Set(finalValue)
+            end)
         end
     end
+    
+    return true
 end
 
 local function MakeDraggable(topbarobject, object)
@@ -272,7 +303,7 @@ function Library:CreateWindow(hubName, toggleKey)
     SearchBar.BackgroundColor3 = Theme.Background
     SearchBar.BorderColor3 = Theme.Border
     SearchBar.BorderSizePixel = 1
-    SearchBar.PlaceholderText = "Search Tab..."
+    SearchBar.PlaceholderText = "Search..."
     SearchBar.Text = ""
     SearchBar.TextColor3 = Theme.Text
     SearchBar.PlaceholderColor3 = Theme.TextDark
@@ -316,17 +347,57 @@ function Library:CreateWindow(hubName, toggleKey)
         end
     end)
 
-    local TabButtons = {} 
+    local TabButtons = {}
+    local TabData = {}
     
-    SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
-        local text = SearchBar.Text:lower()
-        for _, btn in pairs(TabButtons) do
-            if text == "" or btn.Text:lower():find(text) then
+    --// Smart Search System
+    local function SmartSearch(query)
+        query = query:lower()
+        
+        if query == "" then
+            for _, btn in pairs(TabButtons) do
                 btn.Visible = true
+            end
+            return
+        end
+        
+        local results = {}
+        
+        for tabName, data in pairs(TabData) do
+            local score = 0
+            local tabLower = tabName:lower()
+            
+            if tabLower:find(query, 1, true) then
+                score = score + 100
+            end
+            
+            for _, funcName in ipairs(data.functions) do
+                local funcLower = funcName:lower()
+                if funcLower:find(query, 1, true) then
+                    score = score + 50
+                end
+            end
+            
+            if score > 0 then
+                results[tabName] = score
+            end
+        end
+        
+        for _, btn in pairs(TabButtons) do
+            if results[btn.Text] then
+                btn.Visible = true
+                local originalColor = btn.BackgroundColor3
+                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Hover}):Play()
+                task.wait(0.05)
+                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = originalColor}):Play()
             else
                 btn.Visible = false
             end
         end
+    end
+    
+    SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
+        SmartSearch(SearchBar.Text)
     end)
 
     local Window = {}
@@ -344,6 +415,7 @@ function Library:CreateWindow(hubName, toggleKey)
         TabBtn.Parent = Sidebar
         
         table.insert(TabButtons, TabBtn)
+        TabData[name] = {functions = {}}
 
         local Page = Instance.new("ScrollingFrame")
         Page.Size = UDim2.new(1, -4, 1, 0)
@@ -376,7 +448,10 @@ function Library:CreateWindow(hubName, toggleKey)
         TabBtn.MouseButton1Click:Connect(function()
             for _, child in pairs(ContentArea:GetChildren()) do child.Visible = false end
             for _, child in pairs(Sidebar:GetChildren()) do
-                if child:IsA("TextButton") then child.TextColor3 = Theme.TextDark; child.BackgroundColor3 = Theme.Sidebar end
+                if child:IsA("TextButton") then 
+                    child.TextColor3 = Theme.TextDark
+                    child.BackgroundColor3 = Theme.Sidebar 
+                end
             end
             Page.Visible = true
             TabBtn.TextColor3 = Theme.Text
@@ -423,6 +498,8 @@ function Library:CreateWindow(hubName, toggleKey)
             local Section = {}
 
             function Section:AddLabel(text)
+                table.insert(TabData[name].functions, "Label: " .. text)
+                
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(1, 0, 0, 20)
                 Label.BackgroundTransparency = 1
@@ -441,6 +518,8 @@ function Library:CreateWindow(hubName, toggleKey)
             end
             
             function Section:AddParagraph(title, content)
+                table.insert(TabData[name].functions, "Paragraph: " .. title)
+                
                 local ParaFrame = Instance.new("Frame")
                 ParaFrame.Size = UDim2.new(1, 0, 0, 0)
                 ParaFrame.BackgroundTransparency = 1
@@ -476,6 +555,8 @@ function Library:CreateWindow(hubName, toggleKey)
             end
 
             function Section:AddButton(btnText, callback)
+                table.insert(TabData[name].functions, "Button: " .. btnText)
+                
                 local Button = Instance.new("TextButton")
                 Button.Size = UDim2.new(1, 0, 0, 26)
                 Button.BackgroundColor3 = Theme.Background
@@ -488,7 +569,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 Button.Parent = SectionContainer
 
                 Button.MouseButton1Click:Connect(function()
-                    callback()
+                    pcall(callback)
                     TweenService:Create(Button, TweenInfo.new(0.1), {BackgroundColor3 = Theme.Accent}):Play()
                     task.wait(0.1)
                     TweenService:Create(Button, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Background}):Play()
@@ -496,6 +577,8 @@ function Library:CreateWindow(hubName, toggleKey)
             end
 
             function Section:AddToggle(toggleText, default, flag, callback)
+                table.insert(TabData[name].functions, "Toggle: " .. toggleText)
+                
                 local toggled = default or false
                 
                 local ToggleFrame = Instance.new("TextButton")
@@ -534,7 +617,7 @@ function Library:CreateWindow(hubName, toggleKey)
                     toggled = state
                     Indicator.Visible = toggled
                     if flag then Library.Flags[flag] = toggled end
-                    callback(toggled)
+                    pcall(callback, toggled)
                 end
 
                 ToggleFrame.MouseButton1Click:Connect(function()
@@ -549,10 +632,21 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = toggled
                     end
                 end
+                
+                local ToggleObj = {}
+                function ToggleObj:Set(state)
+                    UpdateState(state)
+                end
+                return ToggleObj
             end
 
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
-                minVal = minVal or 0; maxVal = maxVal or 100; initialVal = initialVal or minVal; step = step or 1
+                table.insert(TabData[name].functions, "Slider: " .. text)
+                
+                minVal = minVal or 0
+                maxVal = maxVal or 100
+                initialVal = initialVal or minVal
+                step = step or 1
                 local currentValue = initialVal
 
                 local SliderFrame = Instance.new("Frame")
@@ -593,7 +687,7 @@ function Library:CreateWindow(hubName, toggleKey)
                     Label.Text = text .. ": " .. tostring(currentValue)
                     
                     if flag then Library.Flags[flag] = currentValue end
-                    callback(currentValue)
+                    pcall(callback, currentValue)
                 end
 
                 local dragging = false
@@ -608,7 +702,8 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 BarFrame.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
-                        dragging = true; updateInput(input) 
+                        dragging = true
+                        updateInput(input) 
                     end
                 end)
                 
@@ -632,9 +727,17 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = currentValue
                     end
                 end
+                
+                local SliderObj = {}
+                function SliderObj:Set(val)
+                    SetValue(val)
+                end
+                return SliderObj
             end
 
             function Section:AddTextbox(placeholder, flag, callback)
+                table.insert(TabData[name].functions, "Textbox: " .. placeholder)
+                
                 local BoxFrame = Instance.new("Frame")
                 BoxFrame.Size = UDim2.new(1, 0, 0, 26)
                 BoxFrame.BackgroundColor3 = Theme.Background
@@ -658,7 +761,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local function SetText(txt)
                     TextBox.Text = txt
                     if flag then Library.Flags[flag] = txt end
-                    callback(txt)
+                    pcall(callback, txt)
                 end
                 
                 TextBox.FocusLost:Connect(function()
@@ -671,9 +774,17 @@ function Library:CreateWindow(hubName, toggleKey)
                         SetText(Library.Flags[flag])
                     end
                 end
+                
+                local TextboxObj = {}
+                function TextboxObj:Set(txt)
+                    SetText(txt)
+                end
+                return TextboxObj
             end
 
             function Section:AddDropdown(text, options, initialIndex, flag, callback)
+                table.insert(TabData[name].functions, "Dropdown: " .. text)
+                
                 local selectedIndex = initialIndex or 1
                 local isExpanded = false
 
@@ -723,7 +834,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local function SetOption(opt)
                     SelectButton.Text = opt
                     if flag then Library.Flags[flag] = opt end
-                    callback(opt)
+                    pcall(callback, opt)
                     
                     isExpanded = false
                     DropdownList.Visible = false
@@ -732,7 +843,9 @@ function Library:CreateWindow(hubName, toggleKey)
                 end
                 
                 local function RefreshList()
-                    for _, v in pairs(DropdownList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+                    for _, v in pairs(DropdownList:GetChildren()) do 
+                        if v:IsA("TextButton") then v:Destroy() end 
+                    end
                     
                     for i, option in ipairs(options) do
                         local ItemBtn = Instance.new("TextButton")
@@ -751,7 +864,7 @@ function Library:CreateWindow(hubName, toggleKey)
                             SetOption(option)
                         end)
                     end
-                    DropdownList.CanvasSize = UDim2.new(0,0,0, #options * 24)
+                    DropdownList.CanvasSize = UDim2.new(0, 0, 0, #options * 24)
                 end
                 
                 RefreshList()
@@ -786,9 +899,22 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = options[selectedIndex]
                     end
                 end
+                
+                local DropdownObj = {}
+                function DropdownObj:Set(val)
+                    SetOption(val)
+                end
+                function DropdownObj:Refresh(newOpts)
+                    options = newOpts
+                    RefreshList()
+                    SetOption(options[1] or "...")
+                end
+                return DropdownObj
             end
             
             function Section:AddColorPicker(text, defaultColor, flag, callback)
+                table.insert(TabData[name].functions, "ColorPicker: " .. text)
+                
                 local default = defaultColor or Color3.fromRGB(255, 255, 255)
                 local colorH, colorS, colorV = default:ToHSV()
                 local currentColor = default
@@ -840,8 +966,8 @@ function Library:CreateWindow(hubName, toggleKey)
                 local SV_Cursor = Instance.new("Frame")
                 SV_Cursor.Size = UDim2.new(0, 4, 0, 4)
                 SV_Cursor.AnchorPoint = Vector2.new(0.5, 0.5)
-                SV_Cursor.BackgroundColor3 = Color3.new(1,1,1)
-                SV_Cursor.BorderColor3 = Color3.new(0,0,0)
+                SV_Cursor.BackgroundColor3 = Color3.new(1, 1, 1)
+                SV_Cursor.BorderColor3 = Color3.new(0, 0, 0)
                 SV_Cursor.Parent = SV_Map
                 SV_Cursor.ZIndex = 7
                 SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
@@ -849,7 +975,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local Hue_Bar = Instance.new("ImageButton")
                 Hue_Bar.Size = UDim2.new(0, 20, 0, 100)
                 Hue_Bar.Position = UDim2.new(0, 120, 0, 10)
-                Hue_Bar.BackgroundColor3 = Color3.new(1,1,1)
+                Hue_Bar.BackgroundColor3 = Color3.new(1, 1, 1)
                 Hue_Bar.BorderSizePixel = 0
                 Hue_Bar.AutoButtonColor = false
                 Hue_Bar.Parent = CP_Container
@@ -858,20 +984,20 @@ function Library:CreateWindow(hubName, toggleKey)
                 local UIGradient = Instance.new("UIGradient")
                 UIGradient.Rotation = 90
                 UIGradient.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)), 
-                    ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255,255,0)), 
-                    ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0,255,0)), 
-                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0,255,255)), 
-                    ColorSequenceKeypoint.new(0.667, Color3.fromRGB(0,0,255)), 
-                    ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255,0,255)), 
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,0))
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)), 
+                    ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255, 255, 0)), 
+                    ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0, 255, 0)), 
+                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)), 
+                    ColorSequenceKeypoint.new(0.667, Color3.fromRGB(0, 0, 255)), 
+                    ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255, 0, 255)), 
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
                 }
                 UIGradient.Parent = Hue_Bar
                 
                 local Hue_Cursor = Instance.new("Frame")
                 Hue_Cursor.Size = UDim2.new(1, 0, 0, 2)
-                Hue_Cursor.BackgroundColor3 = Color3.new(1,1,1)
-                Hue_Cursor.BorderColor3 = Color3.new(0,0,0)
+                Hue_Cursor.BackgroundColor3 = Color3.new(1, 1, 1)
+                Hue_Cursor.BorderColor3 = Color3.new(0, 0, 0)
                 Hue_Cursor.Parent = Hue_Bar
                 Hue_Cursor.ZIndex = 7
                 Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
@@ -882,10 +1008,9 @@ function Library:CreateWindow(hubName, toggleKey)
                     SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
                     
                     if flag then Library.Flags[flag] = currentColor end
-                    callback(currentColor)
+                    pcall(callback, currentColor)
                 end
                 
-                --// UNIVERSAL INPUT HANDLER (Mobile + PC)
                 local draggingSV, draggingHue = false, false
                 
                 local function UpdateSV(input)
@@ -895,7 +1020,7 @@ function Library:CreateWindow(hubName, toggleKey)
                     colorS = rX / SV_Map.AbsoluteSize.X
                     colorV = 1 - (rY / SV_Map.AbsoluteSize.Y)
                     
-                    SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                    SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
                     UpdateColorPicker()
                 end
                 
@@ -947,22 +1072,35 @@ function Library:CreateWindow(hubName, toggleKey)
                         if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
                         colorH, colorS, colorV = col:ToHSV()
                         currentColor = col
-                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
                         Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
                         UpdateColorPicker()
                     end}
                     if Library.Flags[flag] ~= nil then
                         local col = Library.Flags[flag]
-                         if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
                         colorH, colorS, colorV = col:ToHSV()
-                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
                         Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
                         UpdateColorPicker()
                     end
                 end
+                
+                local ColorObj = {}
+                function ColorObj:Set(col)
+                    if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                    colorH, colorS, colorV = col:ToHSV()
+                    currentColor = col
+                    SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
+                    Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                    UpdateColorPicker()
+                end
+                return ColorObj
             end
 
             function Section:AddKeybind(text, initialKey, flag, callback)
+                table.insert(TabData[name].functions, "Keybind: " .. text)
+                
                 local currentKey = initialKey or Enum.KeyCode.RightShift
                 
                 local KeybindBtn = Instance.new("TextButton")
@@ -1011,6 +1149,107 @@ function Library:CreateWindow(hubName, toggleKey)
                 else
                     SetKey(currentKey)
                 end
+                
+                local KeybindObj = {}
+                function KeybindObj:Set(key)
+                    SetKey(key)
+                end
+                return KeybindObj
+            end
+            
+            --// NEW ELEMENT: Progress Bar
+            function Section:AddProgressBar(text, maxValue, flag, colorFlag)
+                table.insert(TabData[name].functions, "ProgressBar: " .. text)
+                
+                maxValue = maxValue or 100
+                local currentValue = 0
+                local barColor = Theme.Accent
+                
+                local ProgressFrame = Instance.new("Frame")
+                ProgressFrame.Size = UDim2.new(1, 0, 0, 38)
+                ProgressFrame.BackgroundTransparency = 1
+                ProgressFrame.Parent = SectionContainer
+
+                local Label = Instance.new("TextLabel")
+                Label.Size = UDim2.new(1, 0, 0, 16)
+                Label.BackgroundTransparency = 1
+                Label.Text = text .. ": 0/" .. maxValue
+                Label.TextColor3 = Theme.Text
+                Label.Font = Enum.Font.Gotham
+                Label.TextSize = 12
+                Label.TextXAlignment = Enum.TextXAlignment.Left
+                Label.Parent = ProgressFrame
+
+                local BarFrame = Instance.new("Frame")
+                BarFrame.Size = UDim2.new(1, 0, 0, 10)
+                BarFrame.Position = UDim2.new(0, 0, 0, 20)
+                BarFrame.BackgroundColor3 = Theme.Background
+                BarFrame.BorderColor3 = Theme.Border
+                BarFrame.BorderSizePixel = 1
+                BarFrame.Parent = ProgressFrame
+
+                local Fill = Instance.new("Frame")
+                Fill.Size = UDim2.new(0, 0, 1, 0)
+                Fill.BackgroundColor3 = barColor
+                Fill.BorderSizePixel = 0
+                Fill.Parent = BarFrame
+                
+                local PercentLabel = Instance.new("TextLabel")
+                PercentLabel.Size = UDim2.new(1, 0, 1, 0)
+                PercentLabel.BackgroundTransparency = 1
+                PercentLabel.Text = "0%"
+                PercentLabel.TextColor3 = Theme.Text
+                PercentLabel.Font = Enum.Font.GothamBold
+                PercentLabel.TextSize = 10
+                PercentLabel.ZIndex = 2
+                PercentLabel.Parent = BarFrame
+
+                local function SetValue(val)
+                    currentValue = math.clamp(val, 0, maxValue)
+                    local ratio = currentValue / maxValue
+                    local percent = math.floor(ratio * 100)
+                    
+                    TweenService:Create(Fill, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {
+                        Size = UDim2.new(ratio, 0, 1, 0)
+                    }):Play()
+                    
+                    Label.Text = text .. ": " .. currentValue .. "/" .. maxValue
+                    PercentLabel.Text = percent .. "%"
+                    
+                    if flag then Library.Flags[flag] = currentValue end
+                end
+                
+                local function SetColor(col)
+                    barColor = col
+                    Fill.BackgroundColor3 = col
+                    if colorFlag then Library.Flags[colorFlag] = col end
+                end
+
+                if flag then
+                    Library.ConfigObjects[flag] = {Type = "ProgressBar", Set = SetValue}
+                    if Library.Flags[flag] ~= nil then
+                        SetValue(Library.Flags[flag])
+                    end
+                end
+                
+                if colorFlag then
+                    Library.ConfigObjects[colorFlag] = {Type = "Color", Set = SetColor}
+                    if Library.Flags[colorFlag] ~= nil then
+                        SetColor(Library.Flags[colorFlag])
+                    end
+                end
+                
+                local ProgressObj = {}
+                function ProgressObj:Set(val)
+                    SetValue(val)
+                end
+                function ProgressObj:SetColor(col)
+                    SetColor(col)
+                end
+                function ProgressObj:Increment(amount)
+                    SetValue(currentValue + (amount or 1))
+                end
+                return ProgressObj
             end
             
             return Section
@@ -1023,44 +1262,99 @@ function Library:CreateWindow(hubName, toggleKey)
     local ConfigSection = SettingsTab:AddSection("Configuration")
     
     local ConfigName = ""
+    local ConfigDropdown = nil
+    
     ConfigSection:AddTextbox("Config Name", nil, function(txt)
         ConfigName = txt
     end)
     
     ConfigSection:AddButton("Save Config", function()
         if ConfigName ~= "" then
-            SaveConfiguration(ConfigName)
-            Library:Notify("Configuration", "Saved config: " .. ConfigName, 3)
+            local success = SaveConfiguration(ConfigName)
+            if success then
+                Library:Notify("Configuration", "Saved config: " .. ConfigName, 3)
+                task.wait(0.5)
+                if ConfigDropdown then
+                    ConfigDropdown:Refresh(RefreshConfigs())
+                end
+            else
+                Library:Notify("Error", "Failed to save config", 3)
+            end
+        else
+            Library:Notify("Error", "Please enter a config name", 3)
         end
     end)
     
     ConfigSection:AddButton("Load Config", function()
         if ConfigName ~= "" then
-            LoadConfiguration(ConfigName)
-            Library:Notify("Configuration", "Loaded config: " .. ConfigName, 3)
+            local success = LoadConfiguration(ConfigName)
+            if success then
+                Library:Notify("Configuration", "Loaded config: " .. ConfigName, 3)
+            else
+                Library:Notify("Error", "Failed to load config or config not found", 3)
+            end
+        else
+            Library:Notify("Error", "Please enter a config name", 3)
         end
     end)
     
-    local ConfigList = {}
     local function RefreshConfigs()
-        ConfigList = {}
+        local ConfigList = {}
         if isfolder(ConfigFolder) then
-            for _, file in ipairs(listfiles(ConfigFolder)) do
+            local files = listfiles(ConfigFolder)
+            for _, file in ipairs(files) do
                 if file:sub(-#ConfigExtension) == ConfigExtension then
-                    local name = file:gsub(ConfigFolder.."/", ""):gsub(ConfigExtension, "")
+                    local name = file:gsub(ConfigFolder .. "/", ""):gsub(ConfigExtension, "")
                     table.insert(ConfigList, name)
                 end
             end
         end
+        if #ConfigList == 0 then
+            table.insert(ConfigList, "No Configs")
+        end
         return ConfigList
     end
     
-    ConfigSection:AddDropdown("Config List", RefreshConfigs(), 1, nil, function(val)
-        ConfigName = val
+    ConfigDropdown = ConfigSection:AddDropdown("Config List", RefreshConfigs(), 1, nil, function(val)
+        if val ~= "No Configs" then
+            ConfigName = val
+        end
     end)
 
     ConfigSection:AddButton("Refresh Config List", function()
-       Library:Notify("System", "Refreshed list (Reload UI to see changes)", 2)
+        if ConfigDropdown then
+            ConfigDropdown:Refresh(RefreshConfigs())
+            Library:Notify("System", "Config list refreshed", 2)
+        end
+    end)
+    
+    ConfigSection:AddButton("Delete Config", function()
+        if ConfigName ~= "" and ConfigName ~= "No Configs" then
+            local configPath = GetConfigName(ConfigName)
+            if isfile(configPath) then
+                delfile(configPath)
+                Library:Notify("Configuration", "Deleted config: " .. ConfigName, 3)
+                ConfigName = ""
+                task.wait(0.5)
+                if ConfigDropdown then
+                    ConfigDropdown:Refresh(RefreshConfigs())
+                end
+            else
+                Library:Notify("Error", "Config not found", 3)
+            end
+        else
+            Library:Notify("Error", "Please select a config to delete", 3)
+        end
+    end)
+    
+    local InfoSection = SettingsTab:AddSection("Information")
+    InfoSection:AddLabel("RavinUI Library v2.0")
+    InfoSection:AddParagraph("Features", "Smart search system, improved config management, and progress bars")
+    
+    local UISection = SettingsTab:AddSection("UI Settings")
+    UISection:AddButton("Reset UI Position", function()
+        MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+        Library:Notify("UI", "Position reset to center", 2)
     end)
 
     return Window
