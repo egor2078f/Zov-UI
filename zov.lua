@@ -1,8 +1,3 @@
---[[ 
-    RavinUI - Professional Edition (Mobile & PC Fixed)
-    Full Universal Input Support for Color Picker
-]]
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
