@@ -313,10 +313,6 @@ function Library:CreateWindow(hubName, toggleKey)
             function Section:AddToggle(toggleText, default, flag, callback)
                 local toggled = default or false
                 
-                if flag and Library.Flags[flag] ~= nil then
-                    toggled = Library.Flags[flag]
-                end
-
                 local ToggleFrame = Instance.new("TextButton")
                 ToggleFrame.Size = UDim2.new(1, 0, 0, 26)
                 ToggleFrame.BackgroundTransparency = 1
@@ -362,19 +358,18 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Toggle", Function = UpdateState}
+                    if Library.Flags[flag] ~= nil then
+                        UpdateState(Library.Flags[flag])
+                    end
                 end
                 
-                callback(toggled) 
+                callback(toggled)
             end
 
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
                 minVal = minVal or 0; maxVal = maxVal or 100; initialVal = initialVal or minVal; step = step or 1
-                
-                if flag and Library.Flags[flag] ~= nil then
-                    initialVal = Library.Flags[flag]
-                end
-
                 local currentValue = initialVal
+
                 local SliderFrame = Instance.new("Frame")
                 SliderFrame.Size = UDim2.new(1, 0, 0, 38)
                 SliderFrame.BackgroundTransparency = 1
@@ -445,6 +440,9 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Slider", Function = SetValue}
+                    if Library.Flags[flag] ~= nil then
+                        SetValue(Library.Flags[flag])
+                    end
                 end
 
                 callback(currentValue)
@@ -471,10 +469,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 TextBox.TextXAlignment = Enum.TextXAlignment.Left
                 TextBox.Parent = BoxFrame
                 
-                if flag and Library.Flags[flag] then
-                    TextBox.Text = Library.Flags[flag]
-                end
-                
                 local function SetText(txt)
                     TextBox.Text = txt
                     if flag then Library.Flags[flag] = txt end
@@ -487,19 +481,14 @@ function Library:CreateWindow(hubName, toggleKey)
                 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Textbox", Function = SetText}
+                    if Library.Flags[flag] ~= nil then
+                        SetText(Library.Flags[flag])
+                    end
                 end
             end
 
             function Section:AddDropdown(text, options, initialIndex, flag, callback)
                 local selectedIndex = initialIndex or 1
-                
-                if flag and Library.Flags[flag] then
-                    local savedVal = Library.Flags[flag]
-                    for i, v in ipairs(options) do
-                        if v == savedVal then selectedIndex = i; break end
-                    end
-                end
-                
                 local isExpanded = false
 
                 local DropdownFrame = Instance.new("Frame")
@@ -587,6 +576,12 @@ function Library:CreateWindow(hubName, toggleKey)
                          for i,v in ipairs(options) do if v == val then idx = i break end end
                          SetOption(val, idx)
                     end}
+                    if Library.Flags[flag] ~= nil then
+                        local saved = Library.Flags[flag]
+                        local idx = 1
+                        for i,v in ipairs(options) do if v == saved then idx = i break end end
+                        SetOption(saved, idx)
+                    end
                 end
                 
                 callback(options[selectedIndex], selectedIndex)
@@ -594,13 +589,6 @@ function Library:CreateWindow(hubName, toggleKey)
             
             function Section:AddColorPicker(text, defaultColor, flag, callback)
                 local currentColor = defaultColor or Color3.fromRGB(255, 255, 255)
-                
-                if flag and Library.Flags[flag] then
-                    local saved = Library.Flags[flag]
-                    if typeof(saved) == "table" then
-                        currentColor = Color3.fromRGB(saved.r * 255, saved.g * 255, saved.b * 255)
-                    end
-                end
 
                 local PickerFrame = Instance.new("Frame")
                 PickerFrame.Size = UDim2.new(1, 0, 0, 26)
@@ -716,20 +704,22 @@ function Library:CreateWindow(hubName, toggleKey)
                         if typeof(col) == "table" then
                              col = Color3.new(col.r, col.g, col.b)
                         end
-                        h, s, v = col:ToHSV()
                         UpdateColor(col)
                     end}
+                    if Library.Flags[flag] ~= nil then
+                        local saved = Library.Flags[flag]
+                        if typeof(saved) == "table" then
+                            local col = Color3.new(saved.r, saved.g, saved.b)
+                            UpdateColor(col)
+                        end
+                    end
                 end
                 
-                UpdateColor()
+                UpdateColor(currentColor)
             end
 
             function Section:AddKeybind(text, initialKey, flag, callback)
                 local currentKey = initialKey or Enum.KeyCode.RightShift
-                
-                if flag and Library.Flags[flag] then
-                    currentKey = Enum.KeyCode[Library.Flags[flag]]
-                end
                 
                 local KeybindBtn = Instance.new("TextButton")
                 KeybindBtn.Size = UDim2.new(1, 0, 0, 26)
@@ -742,8 +732,15 @@ function Library:CreateWindow(hubName, toggleKey)
                 KeybindBtn.TextSize = 12
                 KeybindBtn.Parent = SectionContainer
                 
-                local isSetting = false
+                local function SetKey(key)
+                    CurrentKeybinds[currentKey] = nil
+                    currentKey = key
+                    CurrentKeybinds[currentKey] = callback
+                    KeybindBtn.Text = text .. ": [" .. currentKey.Name .. "]"
+                    if flag then Library.Flags[flag] = currentKey.Name end
+                end
 
+                local isSetting = false
                 KeybindBtn.MouseButton1Click:Connect(function()
                     if isSetting then return end
                     isSetting = true
@@ -752,18 +749,27 @@ function Library:CreateWindow(hubName, toggleKey)
                     local con
                     con = UserInputService.InputBegan:Connect(function(input, gp)
                         if gp or input.UserInputType == Enum.UserInputType.MouseButton1 then return end
-                        CurrentKeybinds[currentKey] = nil
-                        currentKey = input.KeyCode
-                        CurrentKeybinds[currentKey] = callback
-                        KeybindBtn.Text = text .. ": [" .. currentKey.Name .. "]"
-                        
-                        if flag then Library.Flags[flag] = currentKey.Name end
-                        
+                        SetKey(input.KeyCode)
                         isSetting = false
                         con:Disconnect()
                     end)
                 end)
+                
                 CurrentKeybinds[currentKey] = callback
+                
+                if flag then
+                    Library.ConfigObjects[flag] = {Type = "Keybind", Function = function(keyName)
+                        if Enum.KeyCode[keyName] then
+                            SetKey(Enum.KeyCode[keyName])
+                        end
+                    end}
+                    if Library.Flags[flag] then
+                        local loadedKeyName = Library.Flags[flag]
+                        if Enum.KeyCode[loadedKeyName] then
+                             SetKey(Enum.KeyCode[loadedKeyName])
+                        end
+                    end
+                end
             end
 
             return Section
@@ -776,6 +782,7 @@ function Library:CreateWindow(hubName, toggleKey)
         local ConfigSec = ConfigTab:AddSection("Configuration")
         
         local selectedConfig = ""
+        local ConfigDropdown = nil
         
         local function GetConfigs()
             local files = listfiles(ConfigFolder)
@@ -787,7 +794,7 @@ function Library:CreateWindow(hubName, toggleKey)
             return names
         end
         
-        ConfigSec:AddTextbox("Config Name", "ConfigName", function(text)
+        ConfigSec:AddTextbox("Create Name", nil, function(text)
             selectedConfig = text
         end)
         
@@ -795,10 +802,15 @@ function Library:CreateWindow(hubName, toggleKey)
             if selectedConfig == "" then return end
             local json = HttpService:JSONEncode(Library.Flags)
             writefile(ConfigFolder .. "/" .. selectedConfig .. ".json", json)
-            print("Config saved as:", selectedConfig)
         end)
         
-        ConfigSec:AddButton("Load Config", function()
+        ConfigSec:AddLabel("Select Config:")
+        
+        ConfigSec:AddDropdown("Files", GetConfigs(), 1, nil, function(val)
+            selectedConfig = val
+        end)
+        
+        ConfigSec:AddButton("Load Selected", function()
              if selectedConfig == "" then return end
              local path = ConfigFolder .. "/" .. selectedConfig .. ".json"
              if isfile(path) then
@@ -808,22 +820,23 @@ function Library:CreateWindow(hubName, toggleKey)
                      Library.Flags = data
                      for flag, val in pairs(data) do
                          if Library.ConfigObjects[flag] then
-                             Library.ConfigObjects[flag].Function(val)
+                             local obj = Library.ConfigObjects[flag]
+                             if obj.Type == "Color" then
+                                 local col = Color3.new(val.r, val.g, val.b)
+                                 obj.Function(col)
+                             elseif obj.Type == "Keybind" then
+                                 obj.Function(val)
+                             else
+                                 obj.Function(val)
+                             end
                          end
                      end
-                     print("Config loaded:", selectedConfig)
-                 else
-                     print("Error decoding config:", selectedConfig)
                  end
-             else
-                print("Config file not found:", selectedConfig)
              end
         end)
         
-        ConfigSec:AddLabel("Available Configs:")
-        
         ConfigSec:AddButton("Refresh List", function()
-             print("Configs:", table.concat(GetConfigs(), ", "))
+             print("Available:", table.concat(GetConfigs(), ", "))
         end)
     end
     
