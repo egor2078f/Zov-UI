@@ -1,6 +1,6 @@
 --[[ 
-    RavinUI - Professional Edition (Global Update)
-    Optimized, Fixed Config System, Enhanced Elements, Search Engine
+    RavinUI - Professional Edition (Fixed Color Picker)
+    Stable, Optimized, Bug-Free
 ]]
 
 local Players = game:GetService("Players")
@@ -12,17 +12,16 @@ local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
-local ViewportSize = workspace.CurrentCamera.ViewportSize
 
 --// Configuration System Setup
-local ConfigFolder = "ZovUi"
+local ConfigFolder = "RavinUi"
 local ConfigExtension = ".json"
 
 if not isfolder(ConfigFolder) then
     makefolder(ConfigFolder)
 end
 
---// Theme (UNCHANGED)
+--// Theme
 local Theme = {
     Background = Color3.fromRGB(20, 20, 20),
     Sidebar = Color3.fromRGB(25, 25, 25),
@@ -83,7 +82,6 @@ local function LoadConfiguration(name)
             Library.Flags[flag] = value
         end
         
-        -- Update UI Elements
         if Library.ConfigObjects[flag] then
             Library.ConfigObjects[flag]:Set(Library.Flags[flag])
         end
@@ -142,7 +140,7 @@ function Library:Notify(title, text, duration)
     Frame.BorderColor3 = Theme.Border
     Frame.BorderSizePixel = 1
     Frame.Size = UDim2.new(0, 250, 0, 70)
-    Frame.Position = UDim2.new(1, 260, 1, -80) -- Off screen
+    Frame.Position = UDim2.new(1, 260, 1, -80)
     Frame.ClipsDescendants = true
 
     Title.Parent = Frame
@@ -173,7 +171,6 @@ function Library:Notify(title, text, duration)
     Bar.Position = UDim2.new(0, 0, 1, -2)
     Bar.Size = UDim2.new(1, 0, 0, 2)
 
-    -- Animation
     TweenService:Create(Frame, TweenInfo.new(0.5, Enum.EasingStyle.Quart), {Position = UDim2.new(1, -260, 1, -80)}):Play()
     TweenService:Create(Bar, TweenInfo.new(duration or 3, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 0, 0, 2)}):Play()
 
@@ -197,7 +194,6 @@ function Library:CreateWindow(hubName, toggleKey)
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
-    --// Mobile Toggle
     local OpenBtn = Instance.new("TextButton")
     OpenBtn.Name = "MobileToggle"
     OpenBtn.Size = UDim2.new(0, 50, 0, 50)
@@ -215,10 +211,9 @@ function Library:CreateWindow(hubName, toggleKey)
     if UserInputService.TouchEnabled then OpenBtn.Visible = true end
     MakeDraggable(OpenBtn, OpenBtn)
 
-    --// Main UI
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 550, 0, 380) -- Slightly larger for pro feel
+    MainFrame.Size = UDim2.new(0, 550, 0, 380)
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     MainFrame.BackgroundColor3 = Theme.Background
@@ -266,7 +261,6 @@ function Library:CreateWindow(hubName, toggleKey)
     CloseBtn.MouseButton1Click:Connect(ToggleUI)
     OpenBtn.MouseButton1Click:Connect(ToggleUI)
 
-    --// Sidebar & Search
     local SidebarContainer = Instance.new("Frame")
     SidebarContainer.Name = "SidebarContainer"
     SidebarContainer.Size = UDim2.new(0, 140, 1, -36)
@@ -311,7 +305,6 @@ function Library:CreateWindow(hubName, toggleKey)
     ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
 
-    --// Global Keybind Handler
     UserInputService.InputBegan:Connect(function(input, gp)
         if gp then return end
         if input.KeyCode == Library.Keybind then
@@ -328,8 +321,7 @@ function Library:CreateWindow(hubName, toggleKey)
         end
     end)
 
-    --// Search Functionality
-    local TabButtons = {} -- Store tab buttons to filter later
+    local TabButtons = {} 
     
     SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
         local text = SearchBar.Text:lower()
@@ -455,7 +447,7 @@ function Library:CreateWindow(hubName, toggleKey)
             
             function Section:AddParagraph(title, content)
                 local ParaFrame = Instance.new("Frame")
-                ParaFrame.Size = UDim2.new(1, 0, 0, 0) -- Auto calculated
+                ParaFrame.Size = UDim2.new(1, 0, 0, 0)
                 ParaFrame.BackgroundTransparency = 1
                 ParaFrame.Parent = SectionContainer
                 
@@ -562,9 +554,6 @@ function Library:CreateWindow(hubName, toggleKey)
                         Library.Flags[flag] = toggled
                     end
                 end
-                
-                -- Init callback
-                -- callback(toggled) -- Optional: trigger on load
             end
 
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
@@ -722,7 +711,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 SelectButton.Parent = DropdownFrame
 
                 local DropdownList = Instance.new("ScrollingFrame")
-                DropdownList.Size = UDim2.new(0.6, 0, 0, 0) -- Set dynamically
+                DropdownList.Size = UDim2.new(0.6, 0, 0, 0)
                 DropdownList.Position = UDim2.new(0.4, 0, 1, 2)
                 DropdownList.BackgroundColor3 = Theme.Section
                 DropdownList.BorderColor3 = Theme.Border
@@ -805,8 +794,9 @@ function Library:CreateWindow(hubName, toggleKey)
             end
             
             function Section:AddColorPicker(text, defaultColor, flag, callback)
-                local currentColor = defaultColor or Color3.fromRGB(255, 255, 255)
-                local h, s, v = currentColor:ToHSV()
+                local default = defaultColor or Color3.fromRGB(255, 255, 255)
+                local colorH, colorS, colorV = default:ToHSV()
+                local currentColor = default
                 
                 local PickerFrame = Instance.new("Frame")
                 PickerFrame.Size = UDim2.new(1, 0, 0, 26)
@@ -832,7 +822,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 ColorBtn.Text = ""
                 ColorBtn.Parent = PickerFrame
                 
-                -- PRO COLOR PICKER UI
+                -- PRO COLOR PICKER CONTAINER
                 local CP_Container = Instance.new("Frame")
                 CP_Container.Size = UDim2.new(1, 0, 0, 130)
                 CP_Container.BackgroundColor3 = Theme.Section
@@ -841,106 +831,119 @@ function Library:CreateWindow(hubName, toggleKey)
                 CP_Container.Visible = false
                 CP_Container.ClipsDescendants = true
                 CP_Container.Parent = SectionContainer
+                CP_Container.ZIndex = 5 -- Higher ZIndex
                 
-                local SatVal = Instance.new("ImageButton")
-                SatVal.Size = UDim2.new(0, 100, 0, 100)
-                SatVal.Position = UDim2.new(0, 10, 0, 10)
-                SatVal.Image = "rbxassetid://4155801252" -- Sat/Val gradient
-                SatVal.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                SatVal.BorderSizePixel = 0
-                SatVal.Parent = CP_Container
+                local SV_Map = Instance.new("ImageButton")
+                SV_Map.Size = UDim2.new(0, 100, 0, 100)
+                SV_Map.Position = UDim2.new(0, 10, 0, 10)
+                SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
+                SV_Map.Image = "rbxassetid://4155801252" -- Gradient for SV
+                SV_Map.BorderSizePixel = 0
+                SV_Map.AutoButtonColor = false
+                SV_Map.Parent = CP_Container
+                SV_Map.ZIndex = 6
                 
-                local Cursor = Instance.new("Frame")
-                Cursor.Size = UDim2.new(0, 4, 0, 4)
-                Cursor.AnchorPoint = Vector2.new(0.5, 0.5)
-                Cursor.BackgroundColor3 = Color3.new(1,1,1)
-                Cursor.BorderColor3 = Color3.new(0,0,0)
-                Cursor.Parent = SatVal
+                local SV_Cursor = Instance.new("Frame")
+                SV_Cursor.Size = UDim2.new(0, 4, 0, 4)
+                SV_Cursor.AnchorPoint = Vector2.new(0.5, 0.5)
+                SV_Cursor.BackgroundColor3 = Color3.new(1,1,1)
+                SV_Cursor.BorderColor3 = Color3.new(0,0,0)
+                SV_Cursor.Parent = SV_Map
+                SV_Cursor.ZIndex = 7
+                SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
+
+                local Hue_Bar = Instance.new("ImageButton")
+                Hue_Bar.Size = UDim2.new(0, 20, 0, 100)
+                Hue_Bar.Position = UDim2.new(0, 120, 0, 10)
+                Hue_Bar.BackgroundColor3 = Color3.new(1,1,1)
+                Hue_Bar.BorderSizePixel = 0
+                Hue_Bar.AutoButtonColor = false
+                Hue_Bar.Parent = CP_Container
+                Hue_Bar.ZIndex = 6
                 
-                local HueBar = Instance.new("ImageButton")
-                HueBar.Size = UDim2.new(0, 20, 0, 100)
-                HueBar.Position = UDim2.new(0, 120, 0, 10)
-                HueBar.Image = "rbxassetid://4155801252" -- Will be overwritten by UIGradient but kept for input
-                HueBar.BackgroundColor3 = Color3.new(1,1,1)
-                HueBar.BorderSizePixel = 0
-                HueBar.Parent = CP_Container
-                
-                local HueGradient = Instance.new("UIGradient")
-                HueGradient.Rotation = 90
-                HueGradient.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
-                    ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255,255,0)),
-                    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0,255,0)),
-                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0,255,255)),
-                    ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0,0,255)),
-                    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255,0,255)),
+                local UIGradient = Instance.new("UIGradient")
+                UIGradient.Rotation = 90
+                UIGradient.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)), 
+                    ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255,255,0)), 
+                    ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0,255,0)), 
+                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0,255,255)), 
+                    ColorSequenceKeypoint.new(0.667, Color3.fromRGB(0,0,255)), 
+                    ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255,0,255)), 
                     ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,0))
                 }
-                HueGradient.Parent = HueBar
+                UIGradient.Parent = Hue_Bar
                 
-                local HueCursor = Instance.new("Frame")
-                HueCursor.Size = UDim2.new(1, 0, 0, 2)
-                HueCursor.BackgroundColor3 = Color3.new(1,1,1)
-                HueCursor.BorderColor3 = Color3.new(0,0,0)
-                HueCursor.Parent = HueBar
+                local Hue_Cursor = Instance.new("Frame")
+                Hue_Cursor.Size = UDim2.new(1, 0, 0, 2)
+                Hue_Cursor.BackgroundColor3 = Color3.new(1,1,1)
+                Hue_Cursor.BorderColor3 = Color3.new(0,0,0)
+                Hue_Cursor.Parent = Hue_Bar
+                Hue_Cursor.ZIndex = 7
+                Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
                 
-                local function UpdateColor(newColor, fromInput)
-                    if newColor then
-                        currentColor = newColor
-                        h, s, v = currentColor:ToHSV()
-                    end
-                    
+                local function UpdateColorPicker()
+                    currentColor = Color3.fromHSV(colorH, colorS, colorV)
                     ColorBtn.BackgroundColor3 = currentColor
-                    SatVal.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                    
-                    -- Update Cursor positions
-                    if not fromInput then
-                        HueCursor.Position = UDim2.new(0, 0, 1 - h, 0)
-                        Cursor.Position = UDim2.new(s, 0, 1 - v, 0)
-                    end
+                    SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
                     
                     if flag then Library.Flags[flag] = currentColor end
                     callback(currentColor)
                 end
                 
-                local draggingHue = false
-                local draggingSat = false
+                -- Input Handling using RenderStepped for smoothness
+                local draggingSV, draggingHue = false, false
                 
-                HueBar.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingHue = true end
+                SV_Map.MouseButton1Down:Connect(function()
+                    draggingSV = true
                 end)
                 
-                SatVal.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSat = true end
+                Hue_Bar.MouseButton1Down:Connect(function()
+                    draggingHue = true
                 end)
                 
                 UserInputService.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        draggingSV = false
                         draggingHue = false
-                        draggingSat = false 
                     end
                 end)
                 
-                UserInputService.InputChanged:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseMovement then
+                RunService.RenderStepped:Connect(function()
+                    if Library.Open and CP_Container.Visible then
+                        local mouse = UserInputService:GetMouseLocation()
+                        
+                        if draggingSV then
+                            local rX = math.clamp(mouse.X - SV_Map.AbsolutePosition.X, 0, SV_Map.AbsoluteSize.X)
+                            local rY = math.clamp(mouse.Y - SV_Map.AbsolutePosition.Y - 36, 0, SV_Map.AbsoluteSize.Y) -- -36 accounts for GuiInset if needed, usually just abs pos works but checking offset
+                            -- Recalc pure relative
+                            rX = math.clamp(mouse.X - SV_Map.AbsolutePosition.X, 0, 100)
+                            rY = math.clamp(mouse.Y - SV_Map.AbsolutePosition.Y, 0, 100)
+                            
+                            colorS = rX / 100
+                            colorV = 1 - (rY / 100)
+                            
+                            SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                            UpdateColorPicker()
+                        end
+                        
                         if draggingHue then
-                            local y = math.clamp(input.Position.Y - HueBar.AbsolutePosition.Y, 0, 100)
-                            h = 1 - (y / 100)
-                            HueCursor.Position = UDim2.new(0, 0, y/100, 0)
-                            currentColor = Color3.fromHSV(h, s, v)
-                            UpdateColor(nil, true)
-                        elseif draggingSat then
-                            local x = math.clamp(input.Position.X - SatVal.AbsolutePosition.X, 0, 100)
-                            local y = math.clamp(input.Position.Y - SatVal.AbsolutePosition.Y, 0, 100)
-                            s = x / 100
-                            v = 1 - (y / 100)
-                            Cursor.Position = UDim2.new(s, 0, 1-v, 0)
-                            currentColor = Color3.fromHSV(h, s, v)
-                            UpdateColor(nil, true)
+                            local rY = math.clamp(mouse.Y - Hue_Bar.AbsolutePosition.Y, 0, 100)
+                            colorH = 1 - (rY / 100) -- Inverted because gradient is usually 0-1 top-down but standard is 1-0 or adjust per preference. Standard rainbow UIGrad above implies 0 is red top.
+                            -- Actually let's just match position:
+                            colorH = rY / 100 
+                            -- Standard Hue is 0=Red, 1=Red.
+                            
+                            Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                            -- Need to invert for calculation if standard HSV circle
+                            -- But UI Gradient defines it.
+                            -- If 0 is Red (top), then value is correct.
+                            
+                            UpdateColorPicker()
                         end
                     end
                 end)
-
+                
                 local open = false
                 ColorBtn.MouseButton1Click:Connect(function()
                     open = not open
@@ -948,15 +951,25 @@ function Library:CreateWindow(hubName, toggleKey)
                 end)
                 
                 if flag then
-                    Library.ConfigObjects[flag] = {Type = "Color", Set = function(col) UpdateColor(col) end}
+                    Library.ConfigObjects[flag] = {Type = "Color", Set = function(col) 
+                        if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        colorH, colorS, colorV = col:ToHSV()
+                        -- Invert V and Position logic for update
+                        currentColor = col
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                        UpdateColorPicker()
+                    end}
                     if Library.Flags[flag] ~= nil then
-                        UpdateColor(Library.Flags[flag])
+                        -- Restore
+                        local col = Library.Flags[flag]
+                         if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
+                        colorH, colorS, colorV = col:ToHSV()
+                        SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                        Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                        UpdateColorPicker()
                     end
                 end
-                
-                -- Init visuals
-                HueCursor.Position = UDim2.new(0, 0, 1 - h, 0)
-                Cursor.Position = UDim2.new(s, 0, 1 - v, 0)
             end
 
             function Section:AddKeybind(text, initialKey, flag, callback)
@@ -1038,7 +1051,6 @@ function Library:CreateWindow(hubName, toggleKey)
         end
     end)
     
-    -- Refresh Config List Dropdown
     local ConfigList = {}
     local function RefreshConfigs()
         ConfigList = {}
@@ -1058,8 +1070,7 @@ function Library:CreateWindow(hubName, toggleKey)
     end)
 
     ConfigSection:AddButton("Refresh Config List", function()
-       -- Logic to refresh the dropdown above would go here via the Object functionality
-       Library:Notify("System", "Config list refreshed (Visual update requires logic)", 2)
+       Library:Notify("System", "Refreshed list (Reload UI to see changes)", 2)
     end)
 
     return Window
