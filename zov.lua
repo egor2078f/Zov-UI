@@ -15,7 +15,7 @@ local Mouse = LocalPlayer:GetMouse()
 local ViewportSize = workspace.CurrentCamera.ViewportSize
 
 --// Configuration System Setup
-local ConfigFolder = "RavinUi"
+local ConfigFolder = "ZovUi"
 local ConfigExtension = ".json"
 
 if not isfolder(ConfigFolder) then
