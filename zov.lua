@@ -1,17 +1,11 @@
---[[ 
-    RAVION HUB UI LIBRARY - V2.5 (Config System + Color Picker)
-    Updated by Gemini
-]]
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService") -- Нужен для JSON
+local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
--- == CONFIG SYSTEM SETUP ==
 local ConfigFolder = "RavinUi"
 if not isfolder(ConfigFolder) then
     makefolder(ConfigFolder)
@@ -23,18 +17,17 @@ local Theme = {
     Section = Color3.fromRGB(28, 28, 28),
     Text = Color3.fromRGB(240, 240, 240),
     TextDark = Color3.fromRGB(150, 150, 150),
-    Accent = Color3.fromRGB(0, 122, 204), -- VS Code Blue
+    Accent = Color3.fromRGB(0, 122, 204),
     Border = Color3.fromRGB(45, 45, 45),
     Hover = Color3.fromRGB(35, 35, 35)
 }
 
 local Library = {
-    Flags = {}, -- Хранилище значений
-    ConfigObjects = {} -- Хранилище объектов для обновления UI при загрузке
+    Flags = {},
+    ConfigObjects = {}
 }
 local CurrentKeybinds = {}
 
--- === Utility Functions ===
 local function MakeDraggable(topbarobject, object)
     local Dragging = nil
     local DragInput = nil
@@ -74,8 +67,6 @@ local function MakeDraggable(topbarobject, object)
     end)
 end
 
--- === Library Core ===
-
 function Library:CreateWindow(hubName, toggleKey)
     local KEY = toggleKey or Enum.KeyCode.RightControl
 
@@ -89,7 +80,6 @@ function Library:CreateWindow(hubName, toggleKey)
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
-    -- === Mobile Button ===
     local OpenBtn = Instance.new("TextButton")
     OpenBtn.Name = "MobileToggle"
     OpenBtn.Size = UDim2.new(0, 50, 0, 50)
@@ -112,7 +102,7 @@ function Library:CreateWindow(hubName, toggleKey)
 
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 550, 0, 400) -- Немного увеличил размер
+    MainFrame.Size = UDim2.new(0, 480, 0, 320)
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     MainFrame.BackgroundColor3 = Theme.Background
@@ -120,7 +110,6 @@ function Library:CreateWindow(hubName, toggleKey)
     MainFrame.BorderSizePixel = 1
     MainFrame.Parent = ScreenGui
 
-    -- Header
     local Header = Instance.new("Frame")
     Header.Name = "Header"
     Header.Size = UDim2.new(1, 0, 0, 30)
@@ -161,7 +150,6 @@ function Library:CreateWindow(hubName, toggleKey)
         MainFrame.Visible = not MainFrame.Visible
     end)
 
-    -- Sidebar
     local Sidebar = Instance.new("ScrollingFrame")
     Sidebar.Size = UDim2.new(0, 130, 1, -31)
     Sidebar.Position = UDim2.new(0, 0, 0, 31)
@@ -176,7 +164,6 @@ function Library:CreateWindow(hubName, toggleKey)
     SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
     SidebarLayout.Parent = Sidebar
 
-    -- Content Area
     local ContentArea = Instance.new("Frame")
     ContentArea.Size = UDim2.new(1, -132, 1, -31)
     ContentArea.Position = UDim2.new(0, 132, 0, 31)
@@ -184,7 +171,6 @@ function Library:CreateWindow(hubName, toggleKey)
     ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
 
-    -- Toggling Logic
     UserInputService.InputBegan:Connect(function(input, gp)
         if gp then return end
         if input.KeyCode == KEY then
@@ -324,11 +310,9 @@ function Library:CreateWindow(hubName, toggleKey)
                 end)
             end
 
-            -- Modified: Add flag support
             function Section:AddToggle(toggleText, default, flag, callback)
                 local toggled = default or false
                 
-                -- Check Config
                 if flag and Library.Flags[flag] ~= nil then
                     toggled = Library.Flags[flag]
                 end
@@ -380,15 +364,12 @@ function Library:CreateWindow(hubName, toggleKey)
                     Library.ConfigObjects[flag] = {Type = "Toggle", Function = UpdateState}
                 end
                 
-                -- Initialize (Don't call callback yet if just loading logic, but for safety usually fine)
                 callback(toggled) 
             end
 
-            -- Modified: Add flag support
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
                 minVal = minVal or 0; maxVal = maxVal or 100; initialVal = initialVal or minVal; step = step or 1
                 
-                -- Check Config
                 if flag and Library.Flags[flag] ~= nil then
                     initialVal = Library.Flags[flag]
                 end
@@ -469,7 +450,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 callback(currentValue)
             end
 
-            -- Modified: Add flag support
             function Section:AddTextbox(placeholder, flag, callback)
                 local BoxFrame = Instance.new("Frame")
                 BoxFrame.Size = UDim2.new(1, 0, 0, 26)
@@ -495,26 +475,25 @@ function Library:CreateWindow(hubName, toggleKey)
                     TextBox.Text = Library.Flags[flag]
                 end
                 
+                local function SetText(txt)
+                    TextBox.Text = txt
+                    if flag then Library.Flags[flag] = txt end
+                    callback(txt)
+                end
+                
                 TextBox.FocusLost:Connect(function(enterPressed)
-                    if flag then Library.Flags[flag] = TextBox.Text end
-                    callback(TextBox.Text)
+                    SetText(TextBox.Text)
                 end)
                 
                 if flag then
-                    Library.ConfigObjects[flag] = {Type = "Textbox", Function = function(txt) 
-                        TextBox.Text = txt
-                        callback(txt)
-                    end}
+                    Library.ConfigObjects[flag] = {Type = "Textbox", Function = SetText}
                 end
             end
 
-            -- Modified: Add flag support
             function Section:AddDropdown(text, options, initialIndex, flag, callback)
                 local selectedIndex = initialIndex or 1
                 
-                 -- Check Config
                 if flag and Library.Flags[flag] then
-                     -- Если сохранено строковое значение опции, найдем его индекс
                     local savedVal = Library.Flags[flag]
                     for i, v in ipairs(options) do
                         if v == savedVal then selectedIndex = i; break end
@@ -604,7 +583,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Dropdown", Function = function(val)
-                         -- Find index
                          local idx = 1
                          for i,v in ipairs(options) do if v == val then idx = i break end end
                          SetOption(val, idx)
@@ -614,14 +592,11 @@ function Library:CreateWindow(hubName, toggleKey)
                 callback(options[selectedIndex], selectedIndex)
             end
             
-            -- === NEW: COLOR PICKER ===
             function Section:AddColorPicker(text, defaultColor, flag, callback)
                 local currentColor = defaultColor or Color3.fromRGB(255, 255, 255)
                 
-                -- Check Config
                 if flag and Library.Flags[flag] then
                     local saved = Library.Flags[flag]
-                    -- Конвертируем сохраненную таблицу обратно в Color3
                     if typeof(saved) == "table" then
                         currentColor = Color3.fromRGB(saved.r * 255, saved.g * 255, saved.b * 255)
                     end
@@ -651,7 +626,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 ColorBtn.Text = ""
                 ColorBtn.Parent = PickerFrame
                 
-                -- Color Picker Dropdown Area
                 local CP_Container = Instance.new("Frame")
                 CP_Container.Size = UDim2.new(1, 0, 0, 60)
                 CP_Container.BackgroundColor3 = Theme.Section
@@ -660,7 +634,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 CP_Container.Visible = false
                 CP_Container.Parent = SectionContainer
                 
-                -- Hue Slider (Rainbow)
                 local HueBar = Instance.new("TextButton")
                 HueBar.Size = UDim2.new(1, -10, 0, 20)
                 HueBar.Position = UDim2.new(0, 5, 0, 5)
@@ -679,8 +652,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 }
                 UIGradient.Parent = HueBar
                 
-                -- Saturation/Value Sliders could be complex, let's stick to Hue + a standard simple value slider
-                -- Value/Sat simplified slider
                 local SatBar = Instance.new("TextButton")
                 SatBar.Size = UDim2.new(1, -10, 0, 20)
                 SatBar.Position = UDim2.new(0, 5, 0, 30)
@@ -694,39 +665,40 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 local h, s, v = currentColor:ToHSV()
                 
-                local function UpdateColor()
-                    currentColor = Color3.fromHSV(h, s, v)
+                local function UpdateColor(newColor)
+                    if newColor then
+                        currentColor = newColor
+                        h, s, v = currentColor:ToHSV()
+                    end
+
                     ColorBtn.BackgroundColor3 = currentColor
-                    SatBar.BackgroundColor3 = Color3.fromHSV(h, 1, 1) -- Set base color for Sat bar
+                    SatBar.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
                     
                     if flag then 
-                        -- Save as simple table r,g,b
                         Library.Flags[flag] = {r = currentColor.R, g = currentColor.G, b = currentColor.B} 
                     end
                     callback(currentColor)
                 end
                 
-                -- Logic for Hue
                 HueBar.MouseButton1Down:Connect(function()
                     local moveConn
                     moveConn = RunService.RenderStepped:Connect(function()
                          local tx = math.clamp(Mouse.X - HueBar.AbsolutePosition.X, 0, HueBar.AbsoluteSize.X)
                          h = tx / HueBar.AbsoluteSize.X
-                         UpdateColor()
+                         UpdateColor(Color3.fromHSV(h, s, v))
                          if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
                              moveConn:Disconnect()
                          end
                     end)
                 end)
                 
-                -- Logic for Sat/Val (Combining them for simplicity or just using Value)
                 SatBar.MouseButton1Down:Connect(function()
                     local moveConn
                     moveConn = RunService.RenderStepped:Connect(function()
                          local tx = math.clamp(Mouse.X - SatBar.AbsolutePosition.X, 0, SatBar.AbsoluteSize.X)
                          v = tx / SatBar.AbsoluteSize.X
-                         s = 1 -- Keep saturation high for pop
-                         UpdateColor()
+                         s = 1
+                         UpdateColor(Color3.fromHSV(h, s, v))
                          if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
                              moveConn:Disconnect()
                          end
@@ -745,11 +717,11 @@ function Library:CreateWindow(hubName, toggleKey)
                              col = Color3.new(col.r, col.g, col.b)
                         end
                         h, s, v = col:ToHSV()
-                        UpdateColor()
+                        UpdateColor(col)
                     end}
                 end
                 
-                callback(currentColor)
+                UpdateColor()
             end
 
             function Section:AddKeybind(text, initialKey, flag, callback)
@@ -799,7 +771,6 @@ function Library:CreateWindow(hubName, toggleKey)
         return Tab
     end
     
-    -- === BUILT-IN SETTINGS TAB ===
     function Window:CreateConfigSystem()
         local ConfigTab = Window:AddTab("Settings")
         local ConfigSec = ConfigTab:AddSection("Configuration")
@@ -816,7 +787,7 @@ function Library:CreateWindow(hubName, toggleKey)
             return names
         end
         
-        ConfigSec:AddTextbox("Config Name", nil, function(text)
+        ConfigSec:AddTextbox("Config Name", "ConfigName", function(text)
             selectedConfig = text
         end)
         
@@ -824,6 +795,7 @@ function Library:CreateWindow(hubName, toggleKey)
             if selectedConfig == "" then return end
             local json = HttpService:JSONEncode(Library.Flags)
             writefile(ConfigFolder .. "/" .. selectedConfig .. ".json", json)
+            print("Config saved as:", selectedConfig)
         end)
         
         ConfigSec:AddButton("Load Config", function()
@@ -834,25 +806,28 @@ function Library:CreateWindow(hubName, toggleKey)
                  local success, data = pcall(function() return HttpService:JSONDecode(json) end)
                  if success then
                      Library.Flags = data
-                     -- Update UI Elements
                      for flag, val in pairs(data) do
                          if Library.ConfigObjects[flag] then
                              Library.ConfigObjects[flag].Function(val)
                          end
                      end
+                     print("Config loaded:", selectedConfig)
+                 else
+                     print("Error decoding config:", selectedConfig)
                  end
+             else
+                print("Config file not found:", selectedConfig)
              end
         end)
         
         ConfigSec:AddLabel("Available Configs:")
         
-        local ConfigList = nil
         ConfigSec:AddButton("Refresh List", function()
-             -- Logic usually requires re-creating dropdown or printing to console
-             -- For simplicity in this library structure:
              print("Configs:", table.concat(GetConfigs(), ", "))
         end)
     end
+    
+    Window:CreateConfigSystem()
 
     return Window
 end
