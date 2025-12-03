@@ -1,6 +1,6 @@
 --[[ 
-    RavinUI - Professional Edition (Fixed Color Picker)
-    Stable, Optimized, Bug-Free
+    RavinUI - Professional Edition (Mobile & PC Fixed)
+    Full Universal Input Support for Color Picker
 ]]
 
 local Players = game:GetService("Players")
@@ -822,7 +822,6 @@ function Library:CreateWindow(hubName, toggleKey)
                 ColorBtn.Text = ""
                 ColorBtn.Parent = PickerFrame
                 
-                -- PRO COLOR PICKER CONTAINER
                 local CP_Container = Instance.new("Frame")
                 CP_Container.Size = UDim2.new(1, 0, 0, 130)
                 CP_Container.BackgroundColor3 = Theme.Section
@@ -831,13 +830,13 @@ function Library:CreateWindow(hubName, toggleKey)
                 CP_Container.Visible = false
                 CP_Container.ClipsDescendants = true
                 CP_Container.Parent = SectionContainer
-                CP_Container.ZIndex = 5 -- Higher ZIndex
+                CP_Container.ZIndex = 5 
                 
                 local SV_Map = Instance.new("ImageButton")
                 SV_Map.Size = UDim2.new(0, 100, 0, 100)
                 SV_Map.Position = UDim2.new(0, 10, 0, 10)
                 SV_Map.BackgroundColor3 = Color3.fromHSV(colorH, 1, 1)
-                SV_Map.Image = "rbxassetid://4155801252" -- Gradient for SV
+                SV_Map.Image = "rbxassetid://4155801252"
                 SV_Map.BorderSizePixel = 0
                 SV_Map.AutoButtonColor = false
                 SV_Map.Parent = CP_Container
@@ -891,56 +890,54 @@ function Library:CreateWindow(hubName, toggleKey)
                     callback(currentColor)
                 end
                 
-                -- Input Handling using RenderStepped for smoothness
+                --// UNIVERSAL INPUT HANDLER (Mobile + PC)
                 local draggingSV, draggingHue = false, false
                 
-                SV_Map.MouseButton1Down:Connect(function()
-                    draggingSV = true
-                end)
+                local function UpdateSV(input)
+                    local rX = math.clamp(input.Position.X - SV_Map.AbsolutePosition.X, 0, SV_Map.AbsoluteSize.X)
+                    local rY = math.clamp(input.Position.Y - SV_Map.AbsolutePosition.Y, 0, SV_Map.AbsoluteSize.Y)
+                    
+                    colorS = rX / SV_Map.AbsoluteSize.X
+                    colorV = 1 - (rY / SV_Map.AbsoluteSize.Y)
+                    
+                    SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
+                    UpdateColorPicker()
+                end
                 
-                Hue_Bar.MouseButton1Down:Connect(function()
-                    draggingHue = true
-                end)
-                
-                UserInputService.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        draggingSV = false
-                        draggingHue = false
+                local function UpdateHue(input)
+                    local rY = math.clamp(input.Position.Y - Hue_Bar.AbsolutePosition.Y, 0, Hue_Bar.AbsoluteSize.Y)
+                    colorH = rY / Hue_Bar.AbsoluteSize.Y
+                    
+                    Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
+                    UpdateColorPicker()
+                end
+
+                SV_Map.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        draggingSV = true
+                        UpdateSV(input)
                     end
                 end)
                 
-                RunService.RenderStepped:Connect(function()
-                    if Library.Open and CP_Container.Visible then
-                        local mouse = UserInputService:GetMouseLocation()
-                        
-                        if draggingSV then
-                            local rX = math.clamp(mouse.X - SV_Map.AbsolutePosition.X, 0, SV_Map.AbsoluteSize.X)
-                            local rY = math.clamp(mouse.Y - SV_Map.AbsolutePosition.Y - 36, 0, SV_Map.AbsoluteSize.Y) -- -36 accounts for GuiInset if needed, usually just abs pos works but checking offset
-                            -- Recalc pure relative
-                            rX = math.clamp(mouse.X - SV_Map.AbsolutePosition.X, 0, 100)
-                            rY = math.clamp(mouse.Y - SV_Map.AbsolutePosition.Y, 0, 100)
-                            
-                            colorS = rX / 100
-                            colorV = 1 - (rY / 100)
-                            
-                            SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
-                            UpdateColorPicker()
-                        end
-                        
-                        if draggingHue then
-                            local rY = math.clamp(mouse.Y - Hue_Bar.AbsolutePosition.Y, 0, 100)
-                            colorH = 1 - (rY / 100) -- Inverted because gradient is usually 0-1 top-down but standard is 1-0 or adjust per preference. Standard rainbow UIGrad above implies 0 is red top.
-                            -- Actually let's just match position:
-                            colorH = rY / 100 
-                            -- Standard Hue is 0=Red, 1=Red.
-                            
-                            Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
-                            -- Need to invert for calculation if standard HSV circle
-                            -- But UI Gradient defines it.
-                            -- If 0 is Red (top), then value is correct.
-                            
-                            UpdateColorPicker()
-                        end
+                Hue_Bar.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        draggingHue = true
+                        UpdateHue(input)
+                    end
+                end)
+                
+                UserInputService.InputChanged:Connect(function(input)
+                    if draggingSV and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        UpdateSV(input)
+                    elseif draggingHue and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        UpdateHue(input)
+                    end
+                end)
+                
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        draggingSV = false
+                        draggingHue = false
                     end
                 end)
                 
@@ -954,14 +951,12 @@ function Library:CreateWindow(hubName, toggleKey)
                     Library.ConfigObjects[flag] = {Type = "Color", Set = function(col) 
                         if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
                         colorH, colorS, colorV = col:ToHSV()
-                        -- Invert V and Position logic for update
                         currentColor = col
                         SV_Cursor.Position = UDim2.new(colorS, 0, 1-colorV, 0)
                         Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
                         UpdateColorPicker()
                     end}
                     if Library.Flags[flag] ~= nil then
-                        -- Restore
                         local col = Library.Flags[flag]
                          if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
                         colorH, colorS, colorV = col:ToHSV()
