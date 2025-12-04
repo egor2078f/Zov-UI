@@ -8,12 +8,11 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
---// Configuration System Setup
-local ConfigFolder = "RavinUi"
-local ConfigExtension = ".json"
+--// File System Setup (Smart Folders)
+local RootFolder = "ZovUi"
 
-if not isfolder(ConfigFolder) then
-    makefolder(ConfigFolder)
+if not isfolder(RootFolder) then
+    makefolder(RootFolder)
 end
 
 --// Theme
@@ -25,7 +24,9 @@ local Theme = {
     TextDark = Color3.fromRGB(150, 150, 150),
     Accent = Color3.fromRGB(0, 122, 204),
     Border = Color3.fromRGB(45, 45, 45),
-    Hover = Color3.fromRGB(35, 35, 35)
+    Hover = Color3.fromRGB(35, 35, 35),
+    Success = Color3.fromRGB(60, 179, 113),
+    Error = Color3.fromRGB(220, 53, 69)
 }
 
 --// Library Logic
@@ -34,58 +35,142 @@ local Library = {
     ConfigObjects = {},
     Open = true,
     AccentColor = Theme.Accent,
-    Keybind = Enum.KeyCode.RightControl
+    Keybind = Enum.KeyCode.RightControl,
+    ScriptName = "Default" -- Default script name, will be changed in CreateWindow
 }
 
 local CurrentKeybinds = {}
-local Notifications = Instance.new("ScreenGui")
-Notifications.Name = "RavinNotifications"
-Notifications.Parent = CoreGui
-Notifications.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
---// Utility Functions
-local function GetConfigName(name)
-    return ConfigFolder .. "/" .. name .. ConfigExtension
+--// Notification System
+local NotificationsGui = Instance.new("ScreenGui")
+NotificationsGui.Name = "ZovNotifications"
+NotificationsGui.Parent = CoreGui
+NotificationsGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+
+local NotifContainer = Instance.new("Frame")
+NotifContainer.Name = "Container"
+NotifContainer.Position = UDim2.new(1, -270, 0.5, 0) -- Right side
+NotifContainer.Size = UDim2.new(0, 260, 0.5, 0)
+NotifContainer.BackgroundTransparency = 1
+NotifContainer.Parent = NotificationsGui
+
+local NotifLayout = Instance.new("UIListLayout")
+NotifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+NotifLayout.Padding = UDim.new(0, 5)
+NotifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NotifLayout.Parent = NotifContainer
+
+function Library:Notify(title, text, duration, type)
+    local Frame = Instance.new("Frame")
+    local Title = Instance.new("TextLabel")
+    local Desc = Instance.new("TextLabel")
+    local Bar = Instance.new("Frame")
+    local Gradient = Instance.new("UIGradient")
+    
+    local color = Theme.Accent
+    if type == "error" then color = Theme.Error end
+    if type == "success" then color = Theme.Success end
+
+    Frame.Name = "Notification"
+    Frame.Parent = NotifContainer
+    Frame.BackgroundColor3 = Theme.Section
+    Frame.BorderColor3 = Theme.Border
+    Frame.BorderSizePixel = 1
+    Frame.Size = UDim2.new(1, 0, 0, 0) -- Start small for animation
+    Frame.ClipsDescendants = true
+    Frame.BackgroundTransparency = 0.1
+
+    Title.Parent = Frame
+    Title.BackgroundTransparency = 1
+    Title.Position = UDim2.new(0, 10, 0, 5)
+    Title.Size = UDim2.new(1, -20, 0, 20)
+    Title.Font = Enum.Font.Code
+    Title.Text = title
+    Title.TextColor3 = color
+    Title.TextSize = 14
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+
+    Desc.Parent = Frame
+    Desc.BackgroundTransparency = 1
+    Desc.Position = UDim2.new(0, 10, 0, 25)
+    Desc.Size = UDim2.new(1, -20, 0, 40)
+    Desc.Font = Enum.Font.Gotham
+    Desc.Text = text
+    Desc.TextColor3 = Theme.Text
+    Desc.TextSize = 12
+    Desc.TextWrapped = true
+    Desc.TextXAlignment = Enum.TextXAlignment.Left
+    Desc.TextYAlignment = Enum.TextYAlignment.Top
+
+    Bar.Parent = Frame
+    Bar.BackgroundColor3 = color
+    Bar.BorderSizePixel = 0
+    Bar.Position = UDim2.new(0, 0, 1, -2)
+    Bar.Size = UDim2.new(1, 0, 0, 2)
+
+    -- Animation In
+    TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 70)}):Play()
+    TweenService:Create(Bar, TweenInfo.new(duration or 3, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 0, 0, 2)}):Play()
+
+    task.delay(duration or 3, function()
+        -- Animation Out
+        local Out = TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 0)})
+        Out:Play()
+        Out.Completed:Connect(function() Frame:Destroy() end)
+    end)
+end
+
+--// Configuration System
+local function GetScriptFolder()
+    return RootFolder .. "/" .. Library.ScriptName
+end
+
+local function GetConfigPath(name)
+    return GetScriptFolder() .. "/" .. name .. ".json"
 end
 
 local function SaveConfiguration(name)
+    if not isfolder(GetScriptFolder()) then
+        makefolder(GetScriptFolder())
+    end
+
     local Data = {}
     for flag, value in pairs(Library.Flags) do
         if typeof(value) == "Color3" then
-            Data[flag] = {R = value.R, G = value.G, B = value.B, Type = "Color"}
+            Data[flag] = {R = value.R, G = value.G, B = value.B, IsColor = true}
         elseif typeof(value) == "EnumItem" then
-            Data[flag] = {Name = value.Name, Type = "Keybind"}
+            Data[flag] = {Name = value.Name, IsKeybind = true}
         else
             Data[flag] = value
         end
     end
     
     local success, err = pcall(function()
-        writefile(GetConfigName(name), HttpService:JSONEncode(Data))
+        writefile(GetConfigPath(name), HttpService:JSONEncode(Data))
     end)
     
     if not success then
-        warn("Failed to save config: " .. tostring(err))
+        Library:Notify("Config Error", "Failed to save: " .. tostring(err), 3, "error")
         return false
     end
+    Library:Notify("Config", "Successfully saved: " .. name, 3, "success")
     return true
 end
 
 local function LoadConfiguration(name)
-    local configPath = GetConfigName(name)
+    local configPath = GetConfigPath(name)
     
     if not isfile(configPath) then 
-        warn("Config file not found: " .. configPath)
+        Library:Notify("Config Error", "File not found: " .. name, 3, "error")
         return false
     end
     
     local success, result = pcall(function()
-        local Content = readfile(configPath)
-        return HttpService:JSONDecode(Content)
+        return HttpService:JSONDecode(readfile(configPath))
     end)
     
     if not success then
-        warn("Failed to load config: " .. tostring(result))
+        Library:Notify("Config Error", "Corrupted file", 3, "error")
         return false
     end
     
@@ -94,26 +179,32 @@ local function LoadConfiguration(name)
     for flag, value in pairs(Data) do
         local finalValue = value
         
+        -- Deserialize special types
         if type(value) == "table" then
-            if value.Type == "Color" then
+            if value.IsColor then
                 finalValue = Color3.new(value.R, value.G, value.B)
-            elseif value.Type == "Keybind" then
-                finalValue = Enum.KeyCode[value.Name] or Enum.KeyCode.RightShift
+            elseif value.IsKeybind then
+                finalValue = Enum.KeyCode[value.Name] or Enum.KeyCode.RightControl
             end
         end
         
         Library.Flags[flag] = finalValue
         
+        -- Update UI Object
         if Library.ConfigObjects[flag] and Library.ConfigObjects[flag].Set then
-            pcall(function()
-                Library.ConfigObjects[flag]:Set(finalValue)
+            task.spawn(function()
+                pcall(function()
+                    Library.ConfigObjects[flag]:Set(finalValue)
+                end)
             end)
         end
     end
     
+    Library:Notify("Config", "Loaded: " .. name, 3, "success")
     return true
 end
 
+--// Draggable Logic
 local function MakeDraggable(topbarobject, object)
     local Dragging = nil
     local DragInput = nil
@@ -154,68 +245,23 @@ local function MakeDraggable(topbarobject, object)
     end)
 end
 
-function Library:Notify(title, text, duration)
-    local Frame = Instance.new("Frame")
-    local Title = Instance.new("TextLabel")
-    local Desc = Instance.new("TextLabel")
-    local Bar = Instance.new("Frame")
-    
-    Frame.Name = "Notification"
-    Frame.Parent = Notifications
-    Frame.BackgroundColor3 = Theme.Section
-    Frame.BorderColor3 = Theme.Border
-    Frame.BorderSizePixel = 1
-    Frame.Size = UDim2.new(0, 250, 0, 70)
-    Frame.Position = UDim2.new(1, 260, 1, -80)
-    Frame.ClipsDescendants = true
-
-    Title.Parent = Frame
-    Title.BackgroundTransparency = 1
-    Title.Position = UDim2.new(0, 10, 0, 5)
-    Title.Size = UDim2.new(1, -20, 0, 20)
-    Title.Font = Enum.Font.Code
-    Title.Text = title
-    Title.TextColor3 = Theme.Accent
-    Title.TextSize = 14
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-
-    Desc.Parent = Frame
-    Desc.BackgroundTransparency = 1
-    Desc.Position = UDim2.new(0, 10, 0, 25)
-    Desc.Size = UDim2.new(1, -20, 0, 40)
-    Desc.Font = Enum.Font.Gotham
-    Desc.Text = text
-    Desc.TextColor3 = Theme.Text
-    Desc.TextSize = 12
-    Desc.TextWrapped = true
-    Desc.TextXAlignment = Enum.TextXAlignment.Left
-    Desc.TextYAlignment = Enum.TextYAlignment.Top
-
-    Bar.Parent = Frame
-    Bar.BackgroundColor3 = Theme.Accent
-    Bar.BorderSizePixel = 0
-    Bar.Position = UDim2.new(0, 0, 1, -2)
-    Bar.Size = UDim2.new(1, 0, 0, 2)
-
-    TweenService:Create(Frame, TweenInfo.new(0.5, Enum.EasingStyle.Quart), {Position = UDim2.new(1, -260, 1, -80)}):Play()
-    TweenService:Create(Bar, TweenInfo.new(duration or 3, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 0, 0, 2)}):Play()
-
-    task.delay(duration or 3, function()
-        local Out = TweenService:Create(Frame, TweenInfo.new(0.5, Enum.EasingStyle.Quart), {Position = UDim2.new(1, 260, 1, -80)})
-        Out:Play()
-        Out.Completed:Connect(function() Frame:Destroy() end)
-    end)
-end
-
+--// Main Window Creation
 function Library:CreateWindow(hubName, toggleKey)
+    Library.ScriptName = hubName or "ZovScript" -- Sets the subfolder name
+    
+    -- Create Folder if it doesn't exist for this script
+    if not isfolder(GetScriptFolder()) then
+        makefolder(GetScriptFolder())
+    end
+
     Library.Keybind = toggleKey or Enum.KeyCode.RightControl
 
-    if LocalPlayer.PlayerGui:FindFirstChild("RavionUI") then
-        LocalPlayer.PlayerGui.RavionUI:Destroy()
+    if LocalPlayer.PlayerGui:FindFirstChild("ZovUI_Main") then
+        LocalPlayer.PlayerGui.ZovUI_Main:Destroy()
     end
 
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "RavionUI"
+    ScreenGui.Name = "ZovUI_Main"
     ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
@@ -239,13 +285,29 @@ function Library:CreateWindow(hubName, toggleKey)
 
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 550, 0, 380)
+    MainFrame.Size = UDim2.new(0, 600, 0, 400) -- Slightly larger
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     MainFrame.BackgroundColor3 = Theme.Background
     MainFrame.BorderColor3 = Theme.Border
     MainFrame.BorderSizePixel = 1
     MainFrame.Parent = ScreenGui
+
+    -- Shadow
+    local Shadow = Instance.new("ImageLabel")
+    Shadow.Name = "Shadow"
+    Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    Shadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Shadow.Size = UDim2.new(1, 40, 1, 40)
+    Shadow.BackgroundTransparency = 1
+    Shadow.Image = "rbxassetid://6015897843"
+    Shadow.ImageColor3 = Color3.new(0, 0, 0)
+    Shadow.ImageTransparency = 0.5
+    Shadow.ZIndex = -1
+    Shadow.SliceCenter = Rect.new(49, 49, 450, 450)
+    Shadow.ScaleType = Enum.ScaleType.Slice
+    Shadow.SliceScale = 1
+    Shadow.Parent = MainFrame
 
     local Header = Instance.new("Frame")
     Header.Name = "Header"
@@ -289,7 +351,7 @@ function Library:CreateWindow(hubName, toggleKey)
 
     local SidebarContainer = Instance.new("Frame")
     SidebarContainer.Name = "SidebarContainer"
-    SidebarContainer.Size = UDim2.new(0, 140, 1, -36)
+    SidebarContainer.Size = UDim2.new(0, 150, 1, -36)
     SidebarContainer.Position = UDim2.new(0, 0, 0, 36)
     SidebarContainer.BackgroundColor3 = Theme.Sidebar
     SidebarContainer.BorderColor3 = Theme.Border
@@ -303,7 +365,7 @@ function Library:CreateWindow(hubName, toggleKey)
     SearchBar.BackgroundColor3 = Theme.Background
     SearchBar.BorderColor3 = Theme.Border
     SearchBar.BorderSizePixel = 1
-    SearchBar.PlaceholderText = "Search..."
+    SearchBar.PlaceholderText = "Search Features..."
     SearchBar.Text = ""
     SearchBar.TextColor3 = Theme.Text
     SearchBar.PlaceholderColor3 = Theme.TextDark
@@ -325,12 +387,13 @@ function Library:CreateWindow(hubName, toggleKey)
     SidebarLayout.Parent = Sidebar
 
     local ContentArea = Instance.new("Frame")
-    ContentArea.Size = UDim2.new(1, -142, 1, -36)
-    ContentArea.Position = UDim2.new(0, 142, 0, 36)
+    ContentArea.Size = UDim2.new(1, -152, 1, -36)
+    ContentArea.Position = UDim2.new(0, 152, 0, 36)
     ContentArea.BackgroundTransparency = 1
     ContentArea.ClipsDescendants = true
     ContentArea.Parent = MainFrame
 
+    -- Global Keybind Handler
     UserInputService.InputBegan:Connect(function(input, gp)
         if gp then return end
         if input.KeyCode == Library.Keybind then
@@ -350,55 +413,34 @@ function Library:CreateWindow(hubName, toggleKey)
     local TabButtons = {}
     local TabData = {}
     
-    --// Smart Search System
+    --// Smart Search Logic
     local function SmartSearch(query)
         query = query:lower()
-        
         if query == "" then
-            for _, btn in pairs(TabButtons) do
-                btn.Visible = true
-            end
+            for _, btn in pairs(TabButtons) do btn.Visible = true end
             return
         end
         
         local results = {}
-        
         for tabName, data in pairs(TabData) do
             local score = 0
-            local tabLower = tabName:lower()
-            
-            if tabLower:find(query, 1, true) then
-                score = score + 100
-            end
-            
+            if tabName:lower():find(query, 1, true) then score = score + 100 end
             for _, funcName in ipairs(data.functions) do
-                local funcLower = funcName:lower()
-                if funcLower:find(query, 1, true) then
-                    score = score + 50
-                end
+                if funcName:lower():find(query, 1, true) then score = score + 50 end
             end
-            
-            if score > 0 then
-                results[tabName] = score
-            end
+            if score > 0 then results[tabName] = score end
         end
         
         for _, btn in pairs(TabButtons) do
             if results[btn.Text] then
                 btn.Visible = true
-                local originalColor = btn.BackgroundColor3
-                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Hover}):Play()
-                task.wait(0.05)
-                TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = originalColor}):Play()
             else
                 btn.Visible = false
             end
         end
     end
     
-    SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
-        SmartSearch(SearchBar.Text)
-    end)
+    SearchBar:GetPropertyChangedSignal("Text"):Connect(function() SmartSearch(SearchBar.Text) end)
 
     local Window = {}
     local FirstTab = true
@@ -421,7 +463,7 @@ function Library:CreateWindow(hubName, toggleKey)
         Page.Size = UDim2.new(1, -4, 1, 0)
         Page.Position = UDim2.new(0, 4, 0, 0)
         Page.BackgroundTransparency = 1
-        Page.ScrollBarThickness = 2
+        Page.ScrollBarThickness = 3
         Page.ScrollBarImageColor3 = Theme.Accent
         Page.Visible = false
         Page.BorderSizePixel = 0
@@ -436,6 +478,7 @@ function Library:CreateWindow(hubName, toggleKey)
         PagePad.PaddingTop = UDim.new(0, 6)
         PagePad.PaddingLeft = UDim.new(0, 4)
         PagePad.PaddingRight = UDim.new(0, 4)
+        PagePad.PaddingBottom = UDim.new(0, 6)
         PagePad.Parent = Page
 
         if FirstTab then
@@ -462,41 +505,85 @@ function Library:CreateWindow(hubName, toggleKey)
 
         function Tab:AddSection(sectionName)
             local SectionContainer = Instance.new("Frame")
-            SectionContainer.Size = UDim2.new(1, -4, 0, 30)
             SectionContainer.BackgroundColor3 = Theme.Section
             SectionContainer.BorderColor3 = Theme.Border
             SectionContainer.BorderSizePixel = 1
+            SectionContainer.ClipsDescendants = true
             SectionContainer.Parent = Page
 
+            local SectionHeader = Instance.new("TextButton")
+            SectionHeader.Size = UDim2.new(1, 0, 0, 30)
+            SectionHeader.BackgroundTransparency = 1
+            SectionHeader.Text = ""
+            SectionHeader.Parent = SectionContainer
+
             local SectionTitle = Instance.new("TextLabel")
-            SectionTitle.Size = UDim2.new(1, -10, 0, 20)
-            SectionTitle.Position = UDim2.new(0, 5, 0, 2)
+            SectionTitle.Size = UDim2.new(1, -30, 1, 0)
+            SectionTitle.Position = UDim2.new(0, 10, 0, 0)
             SectionTitle.BackgroundTransparency = 1
             SectionTitle.Text = sectionName:upper()
             SectionTitle.TextColor3 = Theme.Accent
             SectionTitle.Font = Enum.Font.Code
             SectionTitle.TextSize = 11
             SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
-            SectionTitle.Parent = SectionContainer
+            SectionTitle.Parent = SectionHeader
+
+            local Arrow = Instance.new("TextLabel")
+            Arrow.Size = UDim2.new(0, 30, 1, 0)
+            Arrow.Position = UDim2.new(1, -30, 0, 0)
+            Arrow.BackgroundTransparency = 1
+            Arrow.Text = "-"
+            Arrow.TextColor3 = Theme.TextDark
+            Arrow.Font = Enum.Font.GothamBold
+            Arrow.TextSize = 14
+            Arrow.Parent = SectionHeader
+
+            local Container = Instance.new("Frame")
+            Container.Size = UDim2.new(1, 0, 0, 0)
+            Container.Position = UDim2.new(0, 0, 0, 30)
+            Container.BackgroundTransparency = 1
+            Container.Parent = SectionContainer
 
             local SectionLayout = Instance.new("UIListLayout")
             SectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
             SectionLayout.Padding = UDim.new(0, 4)
-            SectionLayout.Parent = SectionContainer
+            SectionLayout.Parent = Container
 
             local SectionPad = Instance.new("UIPadding")
-            SectionPad.PaddingTop = UDim.new(0, 26)
-            SectionPad.PaddingBottom = UDim.new(0, 6)
+            SectionPad.PaddingTop = UDim.new(0, 5)
+            SectionPad.PaddingBottom = UDim.new(0, 5)
             SectionPad.PaddingLeft = UDim.new(0, 6)
             SectionPad.PaddingRight = UDim.new(0, 6)
-            SectionPad.Parent = SectionContainer
+            SectionPad.Parent = Container
+
+            local collapsed = false
+            local function Resize()
+                if collapsed then
+                    TweenService:Create(SectionContainer, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(1, 0, 0, 30)}):Play()
+                    Arrow.Text = "+"
+                else
+                    local h = SectionLayout.AbsoluteContentSize.Y + 40
+                    TweenService:Create(SectionContainer, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(1, 0, 0, h)}):Play()
+                    Arrow.Text = "-"
+                end
+            end
+
+            SectionHeader.MouseButton1Click:Connect(function()
+                collapsed = not collapsed
+                Resize()
+            end)
 
             SectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                SectionContainer.Size = UDim2.new(1, -4, 0, SectionLayout.AbsoluteContentSize.Y + 34)
+                if not collapsed then Resize() end
             end)
+
+            -- Initialize Size
+            SectionContainer.Size = UDim2.new(1, 0, 0, 40) -- Temp
+            task.delay(0.1, Resize)
 
             local Section = {}
 
+            --// ELEMENT: Label
             function Section:AddLabel(text)
                 table.insert(TabData[name].functions, "Label: " .. text)
                 
@@ -508,22 +595,45 @@ function Library:CreateWindow(hubName, toggleKey)
                 Label.Font = Enum.Font.Gotham
                 Label.TextSize = 12
                 Label.TextXAlignment = Enum.TextXAlignment.Left
-                Label.Parent = SectionContainer
+                Label.Parent = Container
                 
                 local LabelObj = {}
-                function LabelObj:Set(newText)
-                    Label.Text = newText
-                end
+                function LabelObj:Set(newText) Label.Text = newText end
                 return LabelObj
             end
             
+            --// ELEMENT: Divider
+            function Section:AddDivider()
+                local Div = Instance.new("Frame")
+                Div.Size = UDim2.new(1, 0, 0, 1)
+                Div.BackgroundColor3 = Theme.Border
+                Div.BorderSizePixel = 0
+                Div.Parent = Container
+            end
+
+            --// ELEMENT: Image
+            function Section:AddImage(imageId, height)
+                local ImgFrame = Instance.new("Frame")
+                ImgFrame.Size = UDim2.new(1, 0, 0, height or 100)
+                ImgFrame.BackgroundTransparency = 1
+                ImgFrame.Parent = Container
+
+                local Img = Instance.new("ImageLabel")
+                Img.Size = UDim2.new(1, 0, 1, 0)
+                Img.BackgroundTransparency = 1
+                Img.ScaleType = Enum.ScaleType.Fit
+                Img.Image = "rbxassetid://" .. tostring(imageId):gsub("rbxassetid://", "")
+                Img.Parent = ImgFrame
+            end
+
+            --// ELEMENT: Paragraph
             function Section:AddParagraph(title, content)
                 table.insert(TabData[name].functions, "Paragraph: " .. title)
                 
                 local ParaFrame = Instance.new("Frame")
                 ParaFrame.Size = UDim2.new(1, 0, 0, 0)
                 ParaFrame.BackgroundTransparency = 1
-                ParaFrame.Parent = SectionContainer
+                ParaFrame.Parent = Container
                 
                 local PTitle = Instance.new("TextLabel")
                 PTitle.Size = UDim2.new(1, 0, 0, 16)
@@ -554,6 +664,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 ParaFrame.Size = UDim2.new(1, 0, 0, bounds + 22)
             end
 
+            --// ELEMENT: Button
             function Section:AddButton(btnText, callback)
                 table.insert(TabData[name].functions, "Button: " .. btnText)
                 
@@ -566,7 +677,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 Button.TextColor3 = Theme.Text
                 Button.Font = Enum.Font.Gotham
                 Button.TextSize = 12
-                Button.Parent = SectionContainer
+                Button.Parent = Container
 
                 Button.MouseButton1Click:Connect(function()
                     pcall(callback)
@@ -576,16 +687,16 @@ function Library:CreateWindow(hubName, toggleKey)
                 end)
             end
 
+            --// ELEMENT: Toggle
             function Section:AddToggle(toggleText, default, flag, callback)
                 table.insert(TabData[name].functions, "Toggle: " .. toggleText)
-                
                 local toggled = default or false
                 
                 local ToggleFrame = Instance.new("TextButton")
                 ToggleFrame.Size = UDim2.new(1, 0, 0, 26)
                 ToggleFrame.BackgroundTransparency = 1
                 ToggleFrame.Text = ""
-                ToggleFrame.Parent = SectionContainer
+                ToggleFrame.Parent = Container
 
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(1, -26, 1, 0)
@@ -620,26 +731,17 @@ function Library:CreateWindow(hubName, toggleKey)
                     pcall(callback, toggled)
                 end
 
-                ToggleFrame.MouseButton1Click:Connect(function()
-                    UpdateState(not toggled)
-                end)
+                ToggleFrame.MouseButton1Click:Connect(function() UpdateState(not toggled) end)
 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Toggle", Set = UpdateState}
-                    if Library.Flags[flag] ~= nil then
-                        UpdateState(Library.Flags[flag])
-                    else
-                        Library.Flags[flag] = toggled
-                    end
+                    if Library.Flags[flag] ~= nil then UpdateState(Library.Flags[flag]) else Library.Flags[flag] = toggled end
                 end
                 
-                local ToggleObj = {}
-                function ToggleObj:Set(state)
-                    UpdateState(state)
-                end
-                return ToggleObj
+                return {Set = UpdateState}
             end
 
+            --// ELEMENT: Slider
             function Section:AddSlider(text, minVal, maxVal, initialVal, step, flag, callback)
                 table.insert(TabData[name].functions, "Slider: " .. text)
                 
@@ -652,7 +754,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local SliderFrame = Instance.new("Frame")
                 SliderFrame.Size = UDim2.new(1, 0, 0, 38)
                 SliderFrame.BackgroundTransparency = 1
-                SliderFrame.Parent = SectionContainer
+                SliderFrame.Parent = Container
 
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(1, 0, 0, 16)
@@ -682,6 +784,11 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 local function SetValue(val)
                     currentValue = math.clamp(val, minVal, maxVal)
+                    -- Rounding to step
+                    currentValue = math.floor(currentValue / step + 0.5) * step
+                    -- Keep decimals clean
+                    currentValue = tonumber(string.format("%."..(tostring(step):match("%.(%d+)") and #tostring(step):match("%.(%d+)") or 0).."f", currentValue))
+
                     local currentRatio = (currentValue - minVal) / (maxVal - minVal)
                     Fill.Size = UDim2.new(currentRatio, 0, 1, 0)
                     Label.Text = text .. ": " .. tostring(currentValue)
@@ -696,8 +803,7 @@ function Library:CreateWindow(hubName, toggleKey)
                     local pos = math.clamp(input.Position.X - BarFrame.AbsolutePosition.X, 0, barWidth)
                     local newRatio = pos / barWidth
                     local rawValue = minVal + newRatio * (maxVal - minVal)
-                    local steppedValue = math.floor(rawValue / step + 0.5) * step
-                    SetValue(steppedValue)
+                    SetValue(rawValue)
                 end
 
                 BarFrame.InputBegan:Connect(function(input)
@@ -721,20 +827,13 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Slider", Set = SetValue}
-                    if Library.Flags[flag] ~= nil then
-                        SetValue(Library.Flags[flag])
-                    else
-                        Library.Flags[flag] = currentValue
-                    end
+                    if Library.Flags[flag] ~= nil then SetValue(Library.Flags[flag]) else Library.Flags[flag] = currentValue end
                 end
                 
-                local SliderObj = {}
-                function SliderObj:Set(val)
-                    SetValue(val)
-                end
-                return SliderObj
+                return {Set = SetValue}
             end
 
+            --// ELEMENT: Textbox
             function Section:AddTextbox(placeholder, flag, callback)
                 table.insert(TabData[name].functions, "Textbox: " .. placeholder)
                 
@@ -743,7 +842,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 BoxFrame.BackgroundColor3 = Theme.Background
                 BoxFrame.BorderColor3 = Theme.Border
                 BoxFrame.BorderSizePixel = 1
-                BoxFrame.Parent = SectionContainer
+                BoxFrame.Parent = Container
 
                 local TextBox = Instance.new("TextBox")
                 TextBox.Size = UDim2.new(1, -8, 1, 0)
@@ -764,35 +863,28 @@ function Library:CreateWindow(hubName, toggleKey)
                     pcall(callback, txt)
                 end
                 
-                TextBox.FocusLost:Connect(function()
-                    SetText(TextBox.Text)
-                end)
+                TextBox.FocusLost:Connect(function() SetText(TextBox.Text) end)
                 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Textbox", Set = SetText}
-                    if Library.Flags[flag] ~= nil then
-                        SetText(Library.Flags[flag])
-                    end
+                    if Library.Flags[flag] ~= nil then SetText(Library.Flags[flag]) end
                 end
                 
-                local TextboxObj = {}
-                function TextboxObj:Set(txt)
-                    SetText(txt)
-                end
-                return TextboxObj
+                return {Set = SetText}
             end
 
+            --// ELEMENT: Dropdown (Single)
             function Section:AddDropdown(text, options, initialIndex, flag, callback)
                 table.insert(TabData[name].functions, "Dropdown: " .. text)
                 
-                local selectedIndex = initialIndex or 1
+                local selectedOption = options[initialIndex or 1] or "..."
                 local isExpanded = false
 
                 local DropdownFrame = Instance.new("Frame")
                 DropdownFrame.Size = UDim2.new(1, 0, 0, 26)
                 DropdownFrame.BackgroundTransparency = 1
                 DropdownFrame.ZIndex = 20
-                DropdownFrame.Parent = SectionContainer
+                DropdownFrame.Parent = Container
 
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(0.4, 0, 1, 0)
@@ -810,7 +902,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 SelectButton.BackgroundColor3 = Theme.Background
                 SelectButton.BorderColor3 = Theme.Border
                 SelectButton.BorderSizePixel = 1
-                SelectButton.Text = options[selectedIndex] or "..."
+                SelectButton.Text = selectedOption
                 SelectButton.TextColor3 = Theme.Accent
                 SelectButton.Font = Enum.Font.Gotham
                 SelectButton.TextSize = 12
@@ -832,6 +924,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 ListLayout.Parent = DropdownList
                 
                 local function SetOption(opt)
+                    selectedOption = opt
                     SelectButton.Text = opt
                     if flag then Library.Flags[flag] = opt end
                     pcall(callback, opt)
@@ -847,7 +940,7 @@ function Library:CreateWindow(hubName, toggleKey)
                         if v:IsA("TextButton") then v:Destroy() end 
                     end
                     
-                    for i, option in ipairs(options) do
+                    for _, option in ipairs(options) do
                         local ItemBtn = Instance.new("TextButton")
                         ItemBtn.Size = UDim2.new(1, 0, 0, 24)
                         ItemBtn.BackgroundColor3 = Theme.Section
@@ -860,9 +953,7 @@ function Library:CreateWindow(hubName, toggleKey)
                         ItemBtn.ZIndex = 51
                         ItemBtn.Parent = DropdownList
     
-                        ItemBtn.MouseButton1Click:Connect(function()
-                            SetOption(option)
-                        end)
+                        ItemBtn.MouseButton1Click:Connect(function() SetOption(option) end)
                     end
                     DropdownList.CanvasSize = UDim2.new(0, 0, 0, #options * 24)
                 end
@@ -886,32 +977,148 @@ function Library:CreateWindow(hubName, toggleKey)
                 if flag then
                     Library.ConfigObjects[flag] = {
                         Type = "Dropdown", 
-                        Set = function(val) SetOption(val) end,
-                        Refresh = function(newOpts) 
-                            options = newOpts 
-                            RefreshList() 
-                            SetOption(options[1] or "...")
-                        end
+                        Set = SetOption,
+                        Refresh = function(newOpts) options = newOpts RefreshList() SetOption(options[1] or "...") end
                     }
-                    if Library.Flags[flag] ~= nil then
-                        SetOption(Library.Flags[flag])
-                    else
-                        Library.Flags[flag] = options[selectedIndex]
-                    end
+                    if Library.Flags[flag] ~= nil then SetOption(Library.Flags[flag]) else Library.Flags[flag] = selectedOption end
                 end
                 
-                local DropdownObj = {}
-                function DropdownObj:Set(val)
-                    SetOption(val)
+                return {Set = SetOption, Refresh = function(n) options = n RefreshList() end}
+            end
+
+            --// ELEMENT: Multi Dropdown (New)
+            function Section:AddMultiDropdown(text, options, flag, callback)
+                table.insert(TabData[name].functions, "MultiDropdown: " .. text)
+                
+                local selected = {} 
+                local isExpanded = false
+
+                local DropdownFrame = Instance.new("Frame")
+                DropdownFrame.Size = UDim2.new(1, 0, 0, 26)
+                DropdownFrame.BackgroundTransparency = 1
+                DropdownFrame.ZIndex = 20
+                DropdownFrame.Parent = Container
+
+                local Label = Instance.new("TextLabel")
+                Label.Size = UDim2.new(0.4, 0, 1, 0)
+                Label.BackgroundTransparency = 1
+                Label.Text = text
+                Label.TextColor3 = Theme.Text
+                Label.Font = Enum.Font.Gotham
+                Label.TextSize = 12
+                Label.TextXAlignment = Enum.TextXAlignment.Left
+                Label.Parent = DropdownFrame
+
+                local SelectButton = Instance.new("TextButton")
+                SelectButton.Size = UDim2.new(0.6, 0, 1, 0)
+                SelectButton.Position = UDim2.new(0.4, 0, 0, 0)
+                SelectButton.BackgroundColor3 = Theme.Background
+                SelectButton.BorderColor3 = Theme.Border
+                SelectButton.BorderSizePixel = 1
+                SelectButton.Text = "..."
+                SelectButton.TextColor3 = Theme.Text
+                SelectButton.Font = Enum.Font.Gotham
+                SelectButton.TextSize = 12
+                SelectButton.Parent = DropdownFrame
+
+                local DropdownList = Instance.new("ScrollingFrame")
+                DropdownList.Size = UDim2.new(0.6, 0, 0, 0)
+                DropdownList.Position = UDim2.new(0.4, 0, 1, 2)
+                DropdownList.BackgroundColor3 = Theme.Section
+                DropdownList.BorderColor3 = Theme.Border
+                DropdownList.BorderSizePixel = 1
+                DropdownList.Visible = false
+                DropdownList.ZIndex = 50 
+                DropdownList.ScrollBarThickness = 2
+                DropdownList.Parent = DropdownFrame
+
+                local ListLayout = Instance.new("UIListLayout")
+                ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                ListLayout.Parent = DropdownList
+                
+                local function UpdateText()
+                    local count = 0
+                    local txt = ""
+                    for k, v in pairs(selected) do
+                        if v then 
+                            count = count + 1 
+                            if count == 1 then txt = k else txt = txt .. ", " .. k end
+                        end
+                    end
+                    if count == 0 then txt = "None" end
+                    SelectButton.Text = txt
+                    
+                    if flag then Library.Flags[flag] = selected end
+                    pcall(callback, selected)
                 end
-                function DropdownObj:Refresh(newOpts)
-                    options = newOpts
-                    RefreshList()
-                    SetOption(options[1] or "...")
+                
+                local function RefreshList()
+                    for _, v in pairs(DropdownList:GetChildren()) do 
+                        if v:IsA("TextButton") then v:Destroy() end 
+                    end
+                    
+                    for _, option in ipairs(options) do
+                        local ItemBtn = Instance.new("TextButton")
+                        ItemBtn.Size = UDim2.new(1, 0, 0, 24)
+                        ItemBtn.BackgroundColor3 = Theme.Section
+                        ItemBtn.BorderColor3 = Theme.Border
+                        ItemBtn.BorderSizePixel = 0
+                        ItemBtn.Text = option
+                        ItemBtn.TextColor3 = Theme.TextDark
+                        ItemBtn.Font = Enum.Font.Gotham
+                        ItemBtn.TextSize = 12
+                        ItemBtn.ZIndex = 51
+                        ItemBtn.Parent = DropdownList
+    
+                        ItemBtn.MouseButton1Click:Connect(function()
+                            if selected[option] then
+                                selected[option] = nil
+                                ItemBtn.TextColor3 = Theme.TextDark
+                            else
+                                selected[option] = true
+                                ItemBtn.TextColor3 = Theme.Accent
+                            end
+                            UpdateText()
+                        end)
+                    end
+                    DropdownList.CanvasSize = UDim2.new(0, 0, 0, #options * 24)
                 end
-                return DropdownObj
+                
+                RefreshList()
+
+                SelectButton.MouseButton1Click:Connect(function()
+                    isExpanded = not isExpanded
+                    DropdownList.Visible = isExpanded
+                    if isExpanded then
+                        DropdownFrame.ZIndex = 60
+                        local h = math.min(#options * 24, 120)
+                        DropdownList.Size = UDim2.new(0.6, 0, 0, h)
+                        DropdownFrame.Size = UDim2.new(1, 0, 0, 26 + h + 2)
+                        
+                        -- Update visuals on open
+                        for _, v in pairs(DropdownList:GetChildren()) do
+                            if v:IsA("TextButton") then
+                                if selected[v.Text] then v.TextColor3 = Theme.Accent else v.TextColor3 = Theme.TextDark end
+                            end
+                        end
+                    else
+                        DropdownFrame.Size = UDim2.new(1, 0, 0, 26)
+                        DropdownFrame.ZIndex = 20
+                    end
+                end)
+                
+                if flag then
+                    Library.ConfigObjects[flag] = {
+                        Type = "MultiDropdown", 
+                        Set = function(val) selected = val or {} UpdateText() end,
+                    }
+                    if Library.Flags[flag] ~= nil then selected = Library.Flags[flag] UpdateText() end
+                end
+                
+                return {Set = function(val) selected = val UpdateText() end}
             end
             
+            --// ELEMENT: Color Picker
             function Section:AddColorPicker(text, defaultColor, flag, callback)
                 table.insert(TabData[name].functions, "ColorPicker: " .. text)
                 
@@ -922,7 +1129,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local PickerFrame = Instance.new("Frame")
                 PickerFrame.Size = UDim2.new(1, 0, 0, 26)
                 PickerFrame.BackgroundTransparency = 1
-                PickerFrame.Parent = SectionContainer
+                PickerFrame.Parent = Container
                 
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(1, -40, 1, 0)
@@ -950,7 +1157,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 CP_Container.BorderSizePixel = 1
                 CP_Container.Visible = false
                 CP_Container.ClipsDescendants = true
-                CP_Container.Parent = SectionContainer
+                CP_Container.Parent = Container
                 CP_Container.ZIndex = 5 
                 
                 local SV_Map = Instance.new("ImageButton")
@@ -1086,18 +1293,17 @@ function Library:CreateWindow(hubName, toggleKey)
                     end
                 end
                 
-                local ColorObj = {}
-                function ColorObj:Set(col)
+                return {Set = function(col)
                     if typeof(col) == "table" then col = Color3.new(col.R, col.G, col.B) end
                     colorH, colorS, colorV = col:ToHSV()
                     currentColor = col
                     SV_Cursor.Position = UDim2.new(colorS, 0, 1 - colorV, 0)
                     Hue_Cursor.Position = UDim2.new(0, 0, colorH, 0)
                     UpdateColorPicker()
-                end
-                return ColorObj
+                end}
             end
 
+            --// ELEMENT: Keybind
             function Section:AddKeybind(text, initialKey, flag, callback)
                 table.insert(TabData[name].functions, "Keybind: " .. text)
                 
@@ -1112,7 +1318,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 KeybindBtn.TextColor3 = Theme.Text
                 KeybindBtn.Font = Enum.Font.Code
                 KeybindBtn.TextSize = 12
-                KeybindBtn.Parent = SectionContainer
+                KeybindBtn.Parent = Container
                 
                 local function SetKey(key)
                     if CurrentKeybinds[currentKey] then CurrentKeybinds[currentKey] = nil end
@@ -1141,23 +1347,15 @@ function Library:CreateWindow(hubName, toggleKey)
                 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "Keybind", Set = SetKey}
-                    if Library.Flags[flag] ~= nil then
-                        SetKey(Library.Flags[flag])
-                    else
-                        SetKey(currentKey)
-                    end
+                    if Library.Flags[flag] ~= nil then SetKey(Library.Flags[flag]) else SetKey(currentKey) end
                 else
                     SetKey(currentKey)
                 end
                 
-                local KeybindObj = {}
-                function KeybindObj:Set(key)
-                    SetKey(key)
-                end
-                return KeybindObj
+                return {Set = SetKey}
             end
             
-            --// NEW ELEMENT: Progress Bar
+            --// ELEMENT: Progress Bar
             function Section:AddProgressBar(text, maxValue, flag, colorFlag)
                 table.insert(TabData[name].functions, "ProgressBar: " .. text)
                 
@@ -1168,7 +1366,7 @@ function Library:CreateWindow(hubName, toggleKey)
                 local ProgressFrame = Instance.new("Frame")
                 ProgressFrame.Size = UDim2.new(1, 0, 0, 38)
                 ProgressFrame.BackgroundTransparency = 1
-                ProgressFrame.Parent = SectionContainer
+                ProgressFrame.Parent = Container
 
                 local Label = Instance.new("TextLabel")
                 Label.Size = UDim2.new(1, 0, 0, 16)
@@ -1209,9 +1407,7 @@ function Library:CreateWindow(hubName, toggleKey)
                     local ratio = currentValue / maxValue
                     local percent = math.floor(ratio * 100)
                     
-                    TweenService:Create(Fill, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {
-                        Size = UDim2.new(ratio, 0, 1, 0)
-                    }):Play()
+                    TweenService:Create(Fill, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(ratio, 0, 1, 0)}):Play()
                     
                     Label.Text = text .. ": " .. currentValue .. "/" .. maxValue
                     PercentLabel.Text = percent .. "%"
@@ -1227,29 +1423,15 @@ function Library:CreateWindow(hubName, toggleKey)
 
                 if flag then
                     Library.ConfigObjects[flag] = {Type = "ProgressBar", Set = SetValue}
-                    if Library.Flags[flag] ~= nil then
-                        SetValue(Library.Flags[flag])
-                    end
+                    if Library.Flags[flag] ~= nil then SetValue(Library.Flags[flag]) end
                 end
                 
                 if colorFlag then
                     Library.ConfigObjects[colorFlag] = {Type = "Color", Set = SetColor}
-                    if Library.Flags[colorFlag] ~= nil then
-                        SetColor(Library.Flags[colorFlag])
-                    end
+                    if Library.Flags[colorFlag] ~= nil then SetColor(Library.Flags[colorFlag]) end
                 end
                 
-                local ProgressObj = {}
-                function ProgressObj:Set(val)
-                    SetValue(val)
-                end
-                function ProgressObj:SetColor(col)
-                    SetColor(col)
-                end
-                function ProgressObj:Increment(amount)
-                    SetValue(currentValue + (amount or 1))
-                end
-                return ProgressObj
+                return {Set = SetValue, SetColor = SetColor, Increment = function(amt) SetValue(currentValue + (amt or 1)) end}
             end
             
             return Section
@@ -1257,105 +1439,73 @@ function Library:CreateWindow(hubName, toggleKey)
         return Tab
     end
 
-    --// Settings Tab Logic
-    local SettingsTab = Window:AddTab("Settings")
-    local ConfigSection = SettingsTab:AddSection("Configuration")
+    --// Built-in Settings Tab
+    local SettingsTab = Window:AddTab("Config")
+    local ConfigSection = SettingsTab:AddSection("Manager")
     
     local ConfigName = ""
     local ConfigDropdown = nil
     
-    ConfigSection:AddTextbox("Config Name", nil, function(txt)
+    ConfigSection:AddTextbox("Create/Load Name", nil, function(txt)
         ConfigName = txt
-    end)
-    
-    ConfigSection:AddButton("Save Config", function()
-        if ConfigName ~= "" then
-            local success = SaveConfiguration(ConfigName)
-            if success then
-                Library:Notify("Configuration", "Saved config: " .. ConfigName, 3)
-                task.wait(0.5)
-                if ConfigDropdown then
-                    ConfigDropdown:Refresh(RefreshConfigs())
-                end
-            else
-                Library:Notify("Error", "Failed to save config", 3)
-            end
-        else
-            Library:Notify("Error", "Please enter a config name", 3)
-        end
-    end)
-    
-    ConfigSection:AddButton("Load Config", function()
-        if ConfigName ~= "" then
-            local success = LoadConfiguration(ConfigName)
-            if success then
-                Library:Notify("Configuration", "Loaded config: " .. ConfigName, 3)
-            else
-                Library:Notify("Error", "Failed to load config or config not found", 3)
-            end
-        else
-            Library:Notify("Error", "Please enter a config name", 3)
-        end
     end)
     
     local function RefreshConfigs()
         local ConfigList = {}
-        if isfolder(ConfigFolder) then
-            local files = listfiles(ConfigFolder)
+        local path = GetScriptFolder()
+        if isfolder(path) then
+            local files = listfiles(path)
             for _, file in ipairs(files) do
-                if file:sub(-#ConfigExtension) == ConfigExtension then
-                    local name = file:gsub(ConfigFolder .. "/", ""):gsub(ConfigExtension, "")
+                if file:sub(-5) == ".json" then
+                    local name = file:gsub(path .. "/", ""):gsub(".json", "")
                     table.insert(ConfigList, name)
                 end
             end
         end
-        if #ConfigList == 0 then
-            table.insert(ConfigList, "No Configs")
-        end
+        if #ConfigList == 0 then table.insert(ConfigList, "No Configs") end
         return ConfigList
     end
-    
-    ConfigDropdown = ConfigSection:AddDropdown("Config List", RefreshConfigs(), 1, nil, function(val)
-        if val ~= "No Configs" then
-            ConfigName = val
-        end
+
+    ConfigDropdown = ConfigSection:AddDropdown("Available Configs", RefreshConfigs(), 1, nil, function(val)
+        if val ~= "No Configs" then ConfigName = val end
     end)
 
-    ConfigSection:AddButton("Refresh Config List", function()
-        if ConfigDropdown then
+    ConfigSection:AddButton("Refresh List", function()
+        if ConfigDropdown then ConfigDropdown:Refresh(RefreshConfigs()) end
+        Library:Notify("System", "Refreshed", 2)
+    end)
+    
+    ConfigSection:AddDivider()
+
+    ConfigSection:AddButton("Save Config", function()
+        if ConfigName ~= "" then
+            SaveConfiguration(ConfigName)
             ConfigDropdown:Refresh(RefreshConfigs())
-            Library:Notify("System", "Config list refreshed", 2)
+        else
+            Library:Notify("Error", "Enter a name", 3, "error")
         end
     end)
     
+    ConfigSection:AddButton("Load Config", function()
+        if ConfigName ~= "" then LoadConfiguration(ConfigName) else Library:Notify("Error", "Enter a name", 3, "error") end
+    end)
+
     ConfigSection:AddButton("Delete Config", function()
         if ConfigName ~= "" and ConfigName ~= "No Configs" then
-            local configPath = GetConfigName(ConfigName)
-            if isfile(configPath) then
-                delfile(configPath)
-                Library:Notify("Configuration", "Deleted config: " .. ConfigName, 3)
-                ConfigName = ""
-                task.wait(0.5)
-                if ConfigDropdown then
-                    ConfigDropdown:Refresh(RefreshConfigs())
-                end
-            else
-                Library:Notify("Error", "Config not found", 3)
+            local path = GetConfigPath(ConfigName)
+            if isfile(path) then
+                delfile(path)
+                Library:Notify("Config", "Deleted: " .. ConfigName, 3, "success")
+                ConfigDropdown:Refresh(RefreshConfigs())
             end
-        else
-            Library:Notify("Error", "Please select a config to delete", 3)
         end
     end)
     
-    local InfoSection = SettingsTab:AddSection("Information")
-    InfoSection:AddLabel("RavinUI Library v2.0")
-    InfoSection:AddParagraph("Features", "Smart search system, improved config management, and progress bars")
-    
-    local UISection = SettingsTab:AddSection("UI Settings")
-    UISection:AddButton("Reset UI Position", function()
-        MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-        Library:Notify("UI", "Position reset to center", 2)
-    end)
+    local InfoSection = SettingsTab:AddSection("Info")
+    InfoSection:AddLabel("User: " .. LocalPlayer.DisplayName)
+    InfoSection:AddLabel("Script: " .. Library.ScriptName)
+    InfoSection:AddImage("rbxassetid://16016599484", 100) -- Example Logo
+    InfoSection:AddButton("Unload UI", function() ScreenGui:Destroy() end)
 
     return Window
 end
