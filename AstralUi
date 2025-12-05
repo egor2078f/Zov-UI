@@ -1,7 +1,8 @@
 --[[ 
-    RAVION STYLE UI LIBRARY v3 (Fixed)
-    - Fixed Tabs Scrolling (Horizontal)
-    - Fixed Color Picker (Hue Right, SV Left)
+    RAVION STYLE UI LIBRARY v4 (Final Polished)
+    - FIXED: Color Picker SV-Square logic (Saturation/Value correct mapping).
+    - Polished sizes and offsets.
+    - Tabs Scrolling retained.
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -57,7 +58,7 @@ function Library:Window(options)
 	local TitleName = options.Name or "Ravion"
 	
 	local ScreenGui = Instance.new("ScreenGui")
-	ScreenGui.Name = "RavionUI_Fixed"
+	ScreenGui.Name = "RavionUI_Final"
 	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	
 	if syn and syn.protect_gui then
@@ -103,7 +104,7 @@ function Library:Window(options)
 	Title.Size = UDim2.new(0, 100, 1, 0)
 	Title.Font = Enum.Font.GothamBold
 	Title.RichText = true
-	Title.Text = "<font color=\"rgb(255,50,50)\">R</font>AVION <font size=\"10\" color=\"rgb(150,150,150)\">v2</font>"
+	Title.Text = "<font color=\"rgb(255,50,50)\">R</font>AVION <font size=\"10\" color=\"rgb(150,150,150)\">v4</font>"
 	Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 	Title.TextSize = 16
 	Title.TextXAlignment = Enum.TextXAlignment.Left
@@ -119,7 +120,7 @@ function Library:Window(options)
 	CloseBtn.TextSize = 20
 	CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 
-	--// FIXED TAB CONTAINER (Scrolling)
+	--// Tab Container (Horizontal Scrolling)
 	local TabContainer = Instance.new("ScrollingFrame")
 	TabContainer.Name = "TabContainer"
 	TabContainer.Parent = Header
@@ -129,10 +130,10 @@ function Library:Window(options)
 	TabContainer.BorderSizePixel = 0
 	TabContainer.Position = UDim2.new(0, 110, 0, 8)
 	TabContainer.Size = UDim2.new(1, -150, 1, -16)
-	TabContainer.CanvasSize = UDim2.new(0, 0, 0, 0) -- Will update automatically
-	TabContainer.ScrollBarThickness = 2 -- Visible thin scrollbar
+	TabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+	TabContainer.ScrollBarThickness = 2
 	TabContainer.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80)
-	TabContainer.ScrollingDirection = Enum.ScrollingDirection.X -- Horizontal scrolling
+	TabContainer.ScrollingDirection = Enum.ScrollingDirection.X
 	
 	local TabLayout = Instance.new("UIListLayout")
 	TabLayout.Parent = TabContainer
@@ -140,7 +141,6 @@ function Library:Window(options)
 	TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	TabLayout.Padding = UDim.new(0, 5)
 
-	-- Auto-resize canvas for tabs
 	TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 		TabContainer.CanvasSize = UDim2.new(0, TabLayout.AbsoluteContentSize.X, 0, 0)
 	end)
@@ -371,7 +371,7 @@ function Library:Window(options)
 			end)
 		end
 
-		--// FIXED COLOR PICKER
+		--// FINAL CORRECTED COLOR PICKER LOGIC
 		function TabFunctions:ColorPicker(text, default, callback)
 			local ColorPickerFrame = Instance.new("Frame")
 			ColorPickerFrame.Parent = Page
@@ -420,35 +420,54 @@ function Library:Window(options)
 			--// 1. SV BOX (LEFT SIDE)
 			local SVBox = Instance.new("Frame")
 			SVBox.Parent = PickerContainer
-			SVBox.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1)
+			SVBox.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1) -- Base Hue
 			SVBox.BorderSizePixel = 0
 			SVBox.Position = UDim2.new(0, 10, 0, 0)
-			SVBox.Size = UDim2.new(0, 120, 0, 120) -- Main Color Square on Left
+			SVBox.Size = UDim2.new(0, 120, 0, 120)
 			
-			local WhiteLayer = Instance.new("ImageLabel") -- Using Image for cleaner gradient if possible, or stacked frames
-			-- Let's use UIGradient as requested for procedural
+			-- Gradient 1: Saturation (White to Hue Color)
+			local SaturationLayer = Instance.new("Frame")
+			SaturationLayer.Parent = SVBox
+			SaturationLayer.BackgroundColor3 = Color3.new(1,1,1)
+			SaturationLayer.BackgroundTransparency = 0
+			SaturationLayer.BorderSizePixel = 0
+			SaturationLayer.Size = UDim2.new(1, 0, 1, 0)
+
+			local SatGrad = Instance.new("UIGradient")
+			SatGrad.Color = ColorSequence.new{
+				ColorSequenceKeypoint.new(0, Color3.new(1,1,1)), 
+				ColorSequenceKeypoint.new(1, Color3.new(1,1,1))
+			}
+			SatGrad.Transparency = NumberSequence.new{
+				NumberSequenceKeypoint.new(0, 0), -- Left (White, Opaque)
+				NumberSequenceKeypoint.new(1, 1) -- Right (Hue Color, Transparent)
+			}
+			SatGrad.Rotation = 0 -- Left to Right
+			SatGrad.Parent = SaturationLayer
 			
-			local WhiteGrad = Instance.new("UIGradient")
-			WhiteGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.new(1,1,1)), ColorSequenceKeypoint.new(1, Color3.new(1,1,1))}
-			WhiteGrad.Transparency = NumberSequence.new{NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)}
-			WhiteGrad.Parent = SVBox
+			-- Gradient 2: Value (Transparent to Black)
+			local ValueLayer = Instance.new("Frame")
+			ValueLayer.Parent = SVBox
+			ValueLayer.BackgroundColor3 = Color3.new(0,0,0)
+			ValueLayer.BackgroundTransparency = 0
+			ValueLayer.BorderSizePixel = 0
+			ValueLayer.Size = UDim2.new(1, 0, 1, 0)
+			ValueLayer.ZIndex = 2
 			
-			local BlackLayer = Instance.new("Frame")
-			BlackLayer.Parent = SVBox
-			BlackLayer.BackgroundColor3 = Color3.new(1,1,1)
-			BlackLayer.BackgroundTransparency = 0
-			BlackLayer.BorderSizePixel = 0
-			BlackLayer.Size = UDim2.new(1, 0, 1, 0)
-			BlackLayer.ZIndex = 2
-			
-			local BlackGrad = Instance.new("UIGradient")
-			BlackGrad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.new(0,0,0)), ColorSequenceKeypoint.new(1, Color3.new(0,0,0))}
-			BlackGrad.Transparency = NumberSequence.new{NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)}
-			BlackGrad.Rotation = 90
-			BlackGrad.Parent = BlackLayer
-			
+			local ValueGrad = Instance.new("UIGradient")
+			ValueGrad.Color = ColorSequence.new{
+				ColorSequenceKeypoint.new(0, Color3.new(0,0,0)), 
+				ColorSequenceKeypoint.new(1, Color3.new(0,0,0))
+			}
+			ValueGrad.Transparency = NumberSequence.new{
+				NumberSequenceKeypoint.new(0, 1), -- Top (Transparent)
+				NumberSequenceKeypoint.new(1, 0) -- Bottom (Black)
+			}
+			ValueGrad.Rotation = 90 -- Top to Bottom
+			ValueGrad.Parent = ValueLayer
+
 			local SVSelector = Instance.new("Frame")
-			SVSelector.Parent = BlackLayer
+			SVSelector.Parent = SVBox
 			SVSelector.BackgroundColor3 = Color3.new(1,1,1)
 			SVSelector.BorderColor3 = Color3.new(0,0,0)
 			SVSelector.Size = UDim2.new(0, 4, 0, 4)
@@ -461,7 +480,7 @@ function Library:Window(options)
 			HueBar.Parent = PickerContainer
 			HueBar.BackgroundColor3 = Color3.new(1,1,1)
 			HueBar.BorderSizePixel = 0
-			HueBar.Position = UDim2.new(1, -35, 0, 0) -- Moved to Right
+			HueBar.Position = UDim2.new(1, -35, 0, 0)
 			HueBar.Size = UDim2.new(0, 25, 0, 120)
 			
 			local HueGrad = Instance.new("UIGradient")
@@ -483,10 +502,12 @@ function Library:Window(options)
 			HueSelector.BorderSizePixel = 0
 			HueSelector.Size = UDim2.new(1, 0, 0, 2)
 			HueSelector.Position = UDim2.new(0, 0, ColorH, 0)
+			HueSelector.ZIndex = 5
 			
 			local function UpdateColor()
 				CurrentColor = Color3.fromHSV(ColorH, ColorS, ColorV)
-				SVBox.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1)
+				-- Обновляем только BackgroundColor3 SVBox, чтобы SaturationLayer и ValueLayer работали как маски
+				SVBox.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1) 
 				ColorPreview.BackgroundColor3 = CurrentColor
 				callback(CurrentColor)
 			end
@@ -496,8 +517,8 @@ function Library:Window(options)
 			local function UpdateSV(input)
 				local rX = math.clamp((input.Position.X - SVBox.AbsolutePosition.X) / SVBox.AbsoluteSize.X, 0, 1)
 				local rY = math.clamp((input.Position.Y - SVBox.AbsolutePosition.Y) / SVBox.AbsoluteSize.Y, 0, 1)
-				ColorS = rX
-				ColorV = 1 - rY
+				ColorS = rX -- X = Saturation (0=Left/White, 1=Right/Full Color)
+				ColorV = 1 - rY -- Y = Value (0=Top/Full Brightness, 1=Bottom/Black)
 				SVSelector.Position = UDim2.new(rX, 0, rY, 0)
 				UpdateColor()
 			end
