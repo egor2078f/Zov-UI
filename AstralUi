@@ -1,1 +1,646 @@
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
 
+local Astral = {}
+
+--// Настройки темы (Можно менять тут, но конфигов внешних нет)
+local Theme = {
+	MainFrame = Color3.fromRGB(25, 25, 25),
+	Header = Color3.fromRGB(30, 30, 30),
+	Sidebar = Color3.fromRGB(35, 35, 35),
+	Element = Color3.fromRGB(40, 40, 40),
+	Text = Color3.fromRGB(240, 240, 240),
+	SubText = Color3.fromRGB(150, 150, 150),
+	Accent = Color3.fromRGB(0, 120, 255), -- Синий неон
+	Stroke = Color3.fromRGB(60, 60, 60)
+}
+
+--// Утилиты
+local function Create(class, props)
+	local inst = Instance.new(class)
+	for i, v in pairs(props) do
+		inst[i] = v
+	end
+	return inst
+end
+
+local function Round(instance, radius)
+	local uiCorner = Create("UICorner", {CornerRadius = UDim.new(0, radius), Parent = instance})
+	return uiCorner
+end
+
+local function Stroke(instance, color, thickness)
+	local uiStroke = Create("UIStroke", {
+		Color = color or Theme.Stroke,
+		Thickness = thickness or 1,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Parent = instance
+	})
+	return uiStroke
+end
+
+-- Эффект волны (Ripple)
+local function CreateRipple(btn)
+	btn.ClipsDescendants = true
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			local ripple = Create("Frame", {
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+				BackgroundTransparency = 0.8,
+				Size = UDim2.new(0, 0, 0, 0),
+				Position = UDim2.new(0, input.Position.X - btn.AbsolutePosition.X, 0, input.Position.Y - btn.AbsolutePosition.Y),
+				Parent = btn,
+				AnchorPoint = Vector2.new(0.5, 0.5)
+			})
+			Round(ripple, 100)
+			
+			local tween = TweenService:Create(ripple, TweenInfo.new(0.5), {Size = UDim2.new(0, 500, 0, 500), BackgroundTransparency = 1})
+			tween:Play()
+			tween.Completed:Connect(function() ripple:Destroy() end)
+		end
+	end)
+end
+
+-- Перетаскивание (PC + Mobile)
+local function MakeDraggable(topbar, object)
+	local dragging, dragInput, dragStart, startPos
+	
+	topbar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = object.Position
+			
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+	
+	topbar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			TweenService:Create(object, TweenInfo.new(0.1), {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)}):Play()
+		end
+	end)
+end
+
+--// Главная функция окна
+function Astral.New(settings)
+	local Title = settings.Title or "Astral UI"
+	
+	-- Защита от повторного открытия (ScreenGui)
+	local Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+	if Parent:FindFirstChild("AstralUI_Lib") then Parent["AstralUI_Lib"]:Destroy() end
+	
+	local ScreenGui = Create("ScreenGui", {Name = "AstralUI_Lib", Parent = Parent, ResetOnSpawn = false})
+	
+	-- Главный фрейм
+	local MainFrame = Create("Frame", {
+		Name = "MainFrame",
+		Parent = ScreenGui,
+		BackgroundColor3 = Theme.MainFrame,
+		Position = UDim2.new(0.5, -250, 0.5, -175),
+		Size = UDim2.new(0, 500, 0, 350),
+		BorderSizePixel = 0
+	})
+	Round(MainFrame, 8)
+	Stroke(MainFrame, Theme.Stroke, 1.5)
+	
+	-- Заголовок
+	local Header = Create("Frame", {
+		Parent = MainFrame,
+		BackgroundColor3 = Theme.Header,
+		Size = UDim2.new(1, 0, 0, 40),
+		BorderSizePixel = 0
+	})
+	Round(Header, 8)
+	
+	-- Фикс углов снизу хедера
+	local HeaderFiller = Create("Frame", {
+		Parent = Header,
+		BackgroundColor3 = Theme.Header,
+		Size = UDim2.new(1, 0, 0, 10),
+		Position = UDim2.new(0,0,1,-10),
+		BorderSizePixel = 0
+	})
+	
+	local TitleLabel = Create("TextLabel", {
+		Parent = Header,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -20, 1, 0),
+		Position = UDim2.new(0, 15, 0, 0),
+		Text = Title,
+		Font = Enum.Font.GothamBold,
+		TextColor3 = Theme.Text,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left
+	})
+	
+	-- Кнопка закрытия
+	local CloseBtn = Create("TextButton", {
+		Parent = Header,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 40, 1, 0),
+		Position = UDim2.new(1, -40, 0, 0),
+		Text = "×",
+		TextColor3 = Theme.SubText,
+		TextSize = 24,
+		Font = Enum.Font.Gotham
+	})
+	CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+	
+	MakeDraggable(Header, MainFrame)
+	
+	-- Контейнер для Табов (Вкладок)
+	local TabContainer = Create("ScrollingFrame", {
+		Parent = MainFrame,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 130, 1, -50),
+		Position = UDim2.new(0, 10, 0, 45),
+		ScrollBarThickness = 0,
+		CanvasSize = UDim2.new(0,0,0,0)
+	})
+	local TabListLayout = Create("UIListLayout", {Parent = TabContainer, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5)})
+	
+	-- Разделитель
+	local Divider = Create("Frame", {
+		Parent = MainFrame,
+		BackgroundColor3 = Theme.Stroke,
+		Size = UDim2.new(0, 1, 1, -40),
+		Position = UDim2.new(0, 150, 0, 40),
+		BorderSizePixel = 0
+	})
+	
+	-- Контейнер для страниц (Где элементы)
+	local PageContainer = Create("Frame", {
+		Parent = MainFrame,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -165, 1, -50),
+		Position = UDim2.new(0, 160, 0, 45),
+		ClipsDescendants = true
+	})
+	
+	local LibraryLogic = {}
+	local FirstTab = true
+	
+	function LibraryLogic:Tab(name)
+		-- Кнопка таба
+		local TabBtn = Create("TextButton", {
+			Parent = TabContainer,
+			BackgroundColor3 = Theme.Sidebar,
+			Size = UDim2.new(1, 0, 0, 35),
+			Text = name,
+			Font = Enum.Font.GothamMedium,
+			TextColor3 = Theme.SubText,
+			TextSize = 13,
+			AutoButtonColor = false
+		})
+		Round(TabBtn, 6)
+		
+		-- Страница с элементами
+		local Page = Create("ScrollingFrame", {
+			Parent = PageContainer,
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 1, 0),
+			ScrollBarThickness = 2,
+			ScrollBarImageColor3 = Theme.Accent,
+			Visible = false,
+			CanvasSize = UDim2.new(0,0,0,0)
+		})
+		local PageLayout = Create("UIListLayout", {Parent = Page, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8)})
+		local PagePadding = Create("UIPadding", {Parent = Page, PaddingTop = UDim.new(0, 5), PaddingLeft = UDim.new(0,5), PaddingRight = UDim.new(0,5)})
+		
+		-- Авто-ресайз скролла
+		PageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			Page.CanvasSize = UDim2.new(0, 0, 0, PageLayout.AbsoluteContentSize.Y + 10)
+		end)
+		
+		-- Логика переключения
+		if FirstTab then
+			TabBtn.TextColor3 = Theme.Text
+			TabBtn.BackgroundColor3 = Theme.Element
+			Page.Visible = true
+			FirstTab = false
+		end
+		
+		TabBtn.MouseButton1Click:Connect(function()
+			-- Сброс всех табов
+			for _, v in pairs(TabContainer:GetChildren()) do
+				if v:IsA("TextButton") then
+					TweenService:Create(v, TweenInfo.new(0.3), {BackgroundColor3 = Theme.Sidebar, TextColor3 = Theme.SubText}):Play()
+				end
+			end
+			for _, v in pairs(PageContainer:GetChildren()) do
+				v.Visible = false
+			end
+			
+			-- Активация текущего
+			TweenService:Create(TabBtn, TweenInfo.new(0.3), {BackgroundColor3 = Theme.Element, TextColor3 = Theme.Text}):Play()
+			Page.Visible = true
+		end)
+		
+		local Elements = {}
+		
+		-- 1. BUTTON
+		function Elements:Button(text, callback)
+			local ButtonFrame = Create("TextButton", {
+				Parent = Page,
+				BackgroundColor3 = Theme.Element,
+				Size = UDim2.new(1, 0, 0, 38),
+				Text = "",
+				AutoButtonColor = false
+			})
+			Round(ButtonFrame, 6)
+			CreateRipple(ButtonFrame)
+			
+			local BtnText = Create("TextLabel", {
+				Parent = ButtonFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -20, 1, 0),
+				Position = UDim2.new(0, 10, 0, 0),
+				Text = text,
+				Font = Enum.Font.Gotham,
+				TextColor3 = Theme.Text,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left
+			})
+			
+			local Icon = Create("ImageLabel", {
+				Parent = ButtonFrame,
+				BackgroundTransparency = 1,
+				Image = "rbxassetid://7072706663", -- Иконка клика
+				ImageColor3 = Theme.Accent,
+				Size = UDim2.new(0, 20, 0, 20),
+				Position = UDim2.new(1, -30, 0.5, -10)
+			})
+			
+			ButtonFrame.MouseButton1Click:Connect(function()
+				callback()
+				-- Мини анимация иконки
+				Icon.Size = UDim2.new(0,15,0,15)
+				TweenService:Create(Icon, TweenInfo.new(0.2), {Size = UDim2.new(0,20,0,20)}):Play()
+			end)
+		end
+		
+		-- 2. TOGGLE
+		function Elements:Toggle(text, default, callback)
+			local toggled = default or false
+			
+			local ToggleFrame = Create("TextButton", {
+				Parent = Page,
+				BackgroundColor3 = Theme.Element,
+				Size = UDim2.new(1, 0, 0, 38),
+				Text = "",
+				AutoButtonColor = false
+			})
+			Round(ToggleFrame, 6)
+			
+			local Label = Create("TextLabel", {
+				Parent = ToggleFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -60, 1, 0),
+				Position = UDim2.new(0, 10, 0, 0),
+				Text = text,
+				Font = Enum.Font.Gotham,
+				TextColor3 = Theme.Text,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left
+			})
+			
+			local SwitchBg = Create("Frame", {
+				Parent = ToggleFrame,
+				BackgroundColor3 = toggled and Theme.Accent or Color3.fromRGB(60,60,60),
+				Size = UDim2.new(0, 40, 0, 20),
+				Position = UDim2.new(1, -50, 0.5, -10)
+			})
+			Round(SwitchBg, 20)
+			
+			local SwitchCircle = Create("Frame", {
+				Parent = SwitchBg,
+				BackgroundColor3 = Color3.fromRGB(255,255,255),
+				Size = UDim2.new(0, 16, 0, 16),
+				Position = toggled and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+			})
+			Round(SwitchCircle, 20)
+			
+			ToggleFrame.MouseButton1Click:Connect(function()
+				toggled = not toggled
+				
+				local targetPos = toggled and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+				local targetColor = toggled and Theme.Accent or Color3.fromRGB(60,60,60)
+				
+				TweenService:Create(SwitchCircle, TweenInfo.new(0.2), {Position = targetPos}):Play()
+				TweenService:Create(SwitchBg, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
+				
+				callback(toggled)
+			end)
+		end
+		
+		-- 3. SLIDER
+		function Elements:Slider(text, min, max, default, callback)
+			local Value = default or min
+			
+			local SliderFrame = Create("Frame", {
+				Parent = Page,
+				BackgroundColor3 = Theme.Element,
+				Size = UDim2.new(1, 0, 0, 50)
+			})
+			Round(SliderFrame, 6)
+			
+			local Label = Create("TextLabel", {
+				Parent = SliderFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 25),
+				Position = UDim2.new(0, 10, 0, 0),
+				Text = text,
+				Font = Enum.Font.Gotham,
+				TextColor3 = Theme.Text,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left
+			})
+			
+			local ValueLabel = Create("TextLabel", {
+				Parent = SliderFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0, 50, 0, 25),
+				Position = UDim2.new(1, -60, 0, 0),
+				Text = tostring(Value),
+				Font = Enum.Font.Gotham,
+				TextColor3 = Theme.SubText,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Right
+			})
+			
+			local SliderBar = Create("Frame", {
+				Parent = SliderFrame,
+				BackgroundColor3 = Color3.fromRGB(60,60,60),
+				Size = UDim2.new(1, -20, 0, 6),
+				Position = UDim2.new(0, 10, 0, 30)
+			})
+			Round(SliderBar, 3)
+			
+			local Fill = Create("Frame", {
+				Parent = SliderBar,
+				BackgroundColor3 = Theme.Accent,
+				Size = UDim2.new((Value - min) / (max - min), 0, 1, 0)
+			})
+			Round(Fill, 3)
+			
+			local Handle = Create("Frame", {
+				Parent = Fill,
+				BackgroundColor3 = Color3.fromRGB(255,255,255),
+				Size = UDim2.new(0, 12, 0, 12),
+				Position = UDim2.new(1, -6, 0.5, -6)
+			})
+			Round(Handle, 6)
+			
+			local dragging = false
+			
+			local function update(input)
+				local pos = UDim2.new(math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1), 0, 1, 0)
+				Fill.Size = pos
+				
+				local newVal = math.floor(min + ((max - min) * pos.X.Scale))
+				ValueLabel.Text = tostring(newVal)
+				callback(newVal)
+			end
+			
+			SliderFrame.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					dragging = true
+					update(input)
+				end
+			end)
+			
+			UserInputService.InputChanged:Connect(function(input)
+				if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+					update(input)
+				end
+			end)
+			
+			UserInputService.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					dragging = false
+				end
+			end)
+		end
+		
+		-- 4. DROPDOWN (Выпадающий список)
+		function Elements:Dropdown(text, options, callback)
+			local isDropped = false
+			
+			local DropdownFrame = Create("Frame", {
+				Parent = Page,
+				BackgroundColor3 = Theme.Element,
+				Size = UDim2.new(1, 0, 0, 38),
+				ClipsDescendants = true
+			})
+			Round(DropdownFrame, 6)
+			
+			local DropBtn = Create("TextButton", {
+				Parent = DropdownFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 38),
+				Text = "",
+				AutoButtonColor = false
+			})
+			
+			local Label = Create("TextLabel", {
+				Parent = DropBtn,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -40, 1, 0),
+				Position = UDim2.new(0, 10, 0, 0),
+				Text = text .. "...",
+				Font = Enum.Font.Gotham,
+				TextColor3 = Theme.Text,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left
+			})
+			
+			local Arrow = Create("ImageLabel", {
+				Parent = DropBtn,
+				BackgroundTransparency = 1,
+				Image = "rbxassetid://6031091004",
+				ImageColor3 = Theme.SubText,
+				Size = UDim2.new(0, 20, 0, 20),
+				Position = UDim2.new(1, -30, 0.5, -10)
+			})
+			
+			local OptionList = Create("Frame", {
+				Parent = DropdownFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 0),
+				Position = UDim2.new(0, 0, 0, 38)
+			})
+			local ListLayout = Create("UIListLayout", {Parent = OptionList, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2)})
+			
+			-- Генерация кнопок
+			for _, opt in pairs(options) do
+				local OptBtn = Create("TextButton", {
+					Parent = OptionList,
+					BackgroundColor3 = Color3.fromRGB(45,45,45),
+					Size = UDim2.new(1, -10, 0, 30),
+					Text = opt,
+					Font = Enum.Font.Gotham,
+					TextColor3 = Theme.SubText,
+					TextSize = 12
+				})
+				Round(OptBtn, 4)
+				
+				OptBtn.MouseButton1Click:Connect(function()
+					Label.Text = text .. ": " .. opt
+					callback(opt)
+					isDropped = false
+					TweenService:Create(DropdownFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 38)}):Play()
+					TweenService:Create(Arrow, TweenInfo.new(0.3), {Rotation = 0}):Play()
+				end)
+			end
+			
+			DropBtn.MouseButton1Click:Connect(function()
+				isDropped = not isDropped
+				local targetHeight = isDropped and (38 + (#options * 32) + 5) or 38
+				TweenService:Create(DropdownFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, targetHeight)}):Play()
+				TweenService:Create(Arrow, TweenInfo.new(0.3), {Rotation = isDropped and 180 or 0}):Play()
+			end)
+		end
+		
+		-- 5. COLOR PICKER (Продвинутый)
+		function Elements:ColorPicker(text, default, callback)
+			local ColorVal = default or Color3.fromRGB(255,255,255)
+			local isOpen = false
+			
+			local PickerFrame = Create("Frame", {
+				Parent = Page,
+				BackgroundColor3 = Theme.Element,
+				Size = UDim2.new(1, 0, 0, 38),
+				ClipsDescendants = true
+			})
+			Round(PickerFrame, 6)
+			
+			local ToggleBtn = Create("TextButton", {
+				Parent = PickerFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 38),
+				Text = "",
+				AutoButtonColor = false
+			})
+			
+			local Label = Create("TextLabel", {
+				Parent = ToggleBtn,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0.7, 0, 1, 0),
+				Position = UDim2.new(0, 10, 0, 0),
+				Text = text,
+				Font = Enum.Font.Gotham,
+				TextColor3 = Theme.Text,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left
+			})
+			
+			local Preview = Create("Frame", {
+				Parent = ToggleBtn,
+				BackgroundColor3 = ColorVal,
+				Size = UDim2.new(0, 30, 0, 20),
+				Position = UDim2.new(1, -40, 0.5, -10)
+			})
+			Round(Preview, 4)
+			Stroke(Preview, Color3.fromRGB(255,255,255), 1)
+			
+			-- Зона выбора цвета (HSV)
+			local PickerZone = Create("Frame", {
+				Parent = PickerFrame,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -20, 0, 100),
+				Position = UDim2.new(0, 10, 0, 40)
+			})
+			
+			-- Hue Slider (Радуга)
+			local HueSlider = Create("Frame", {
+				Parent = PickerZone,
+				Size = UDim2.new(1, 0, 0, 15),
+				Position = UDim2.new(0, 0, 0, 80)
+			})
+			Round(HueSlider, 4)
+			local UIGradient = Create("UIGradient", {
+				Parent = HueSlider,
+				Color = ColorSequence.new{
+					ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
+					ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255,255,0)),
+					ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0,255,0)),
+					ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0,255,255)),
+					ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0,0,255)),
+					ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255,0,255)),
+					ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,0))
+				}
+			})
+			
+			-- Sat/Val Box (Квадрат) - Упрощенный вариант через 3 слайдера (RGB) для стабильности без картинок
+			-- Или сделаем через RGB слайдеры, так надежнее без внешних ассетов.
+			
+			local R_Val, G_Val, B_Val = math.floor(ColorVal.R*255), math.floor(ColorVal.G*255), math.floor(ColorVal.B*255)
+			
+			local function UpdateColor()
+				local newColor = Color3.fromRGB(R_Val, G_Val, B_Val)
+				Preview.BackgroundColor3 = newColor
+				callback(newColor)
+			end
+			
+			local function CreateRGBSlider(name, yPos, col, initVal)
+				local SFrame = Create("Frame", {Parent = PickerZone, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0,0,0,yPos)})
+				local Bar = Create("Frame", {Parent = SFrame, BackgroundColor3 = Color3.fromRGB(30,30,30), Size = UDim2.new(0.8, 0, 0, 4), Position = UDim2.new(0.1,0,0.5,-2)})
+				local Fill = Create("Frame", {Parent = Bar, BackgroundColor3 = col, Size = UDim2.new(initVal/255, 0, 1, 0)})
+				local Text = Create("TextLabel", {Parent = SFrame, BackgroundTransparency = 1, Text = name, TextColor3 = col, Size = UDim2.new(0.1,0,1,0), Font = Enum.Font.GothamBold, TextSize = 10})
+				
+				local isDragging = false
+				SFrame.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						isDragging = true
+						local x = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+						Fill.Size = UDim2.new(x, 0, 1, 0)
+						if name == "R" then R_Val = x*255 elseif name == "G" then G_Val = x*255 else B_Val = x*255 end
+						UpdateColor()
+					end
+				end)
+				
+				UserInputService.InputChanged:Connect(function(input)
+					if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+						local x = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+						Fill.Size = UDim2.new(x, 0, 1, 0)
+						if name == "R" then R_Val = x*255 elseif name == "G" then G_Val = x*255 else B_Val = x*255 end
+						UpdateColor()
+					end
+				end)
+				UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isDragging = false end end)
+			end
+			
+			CreateRGBSlider("R", 0, Color3.fromRGB(255,50,50), R_Val)
+			CreateRGBSlider("G", 25, Color3.fromRGB(50,255,50), G_Val)
+			CreateRGBSlider("B", 50, Color3.fromRGB(50,50,255), B_Val)
+			
+			HueSlider.Visible = false -- Скрываем радугу, используем RGB для точности
+			
+			ToggleBtn.MouseButton1Click:Connect(function()
+				isOpen = not isOpen
+				TweenService:Create(PickerFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, isOpen and 125 or 38)}):Play()
+			end)
+		end
+		
+		return Elements
+	end
+	
+	return LibraryLogic
+end
+
+return Astral
