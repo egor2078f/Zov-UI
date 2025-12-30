@@ -61,8 +61,11 @@ function lib:Create(title)
     local sg = Instance.new("ScreenGui")
     sg.Name = "EtherealUI_"..math.random(1,9999)
     sg.ResetOnSpawn = false
-    pcall(function() sg.Parent = core end)
-    if sg.Parent ~= core then sg.Parent = plr:WaitForChild("PlayerGui") end
+    sg.IgnoreGuiInset = true
+    sg.DisplayOrder = 999
+    
+    local success, _ = pcall(function() sg.Parent = core end)
+    if not success then sg.Parent = plr:WaitForChild("PlayerGui") end
 
     local main = Instance.new("Frame")
     main.Size = UDim2.new(0, 260, 0, 370)
@@ -73,9 +76,8 @@ function lib:Create(title)
     
     local notifArea = Instance.new("Frame")
     notifArea.Size = UDim2.new(0, 200, 1, 0)
-    notifArea.Position = UDim2.new(1, 20, 0, 0)
+    notifArea.Position = UDim2.new(1, -210, 0, 10)
     notifArea.BackgroundTransparency = 1
-    notifArea.Parent = main -- Привязываем к ScreenGui, если хотим вне окна, но просили минимизировать
     notifArea.Parent = sg
 
     local notifList = Instance.new("UIListLayout")
@@ -155,6 +157,7 @@ function lib:Create(title)
     tabs.BackgroundTransparency = 1
     tabs.ScrollBarThickness = 0
     tabs.CanvasSize = UDim2.new(0,0,0,0)
+    tabs.AutomaticCanvasSize = Enum.AutomaticSize.X
     tabs.ScrollingDirection = Enum.ScrollingDirection.X
     tabs.Parent = main
     
@@ -243,6 +246,7 @@ function lib:Create(title)
         pg.ScrollBarThickness = 2
         pg.ScrollBarImageColor3 = lib.theme.acc1
         pg.CanvasSize = UDim2.new(0,0,0,0)
+        pg.AutomaticCanvasSize = Enum.AutomaticSize.Y
         pg.Visible = false
         pg.Parent = pgs
         
@@ -253,13 +257,6 @@ function lib:Create(title)
         plist.Parent = pg
         local ppad = Instance.new("UIPadding")
         ppad.PaddingTop = UDim.new(0, 10); ppad.PaddingBottom = UDim.new(0, 10); ppad.Parent = pg
-
-        plist:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pg.CanvasSize = UDim2.new(0, 0, 0, plist.AbsoluteContentSize.Y + 20)
-        end)
-        tlist:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            tabs.CanvasSize = UDim2.new(0, tlist.AbsoluteContentSize.X + 20, 0, 0)
-        end)
 
         local function act()
             for _, v in ipairs(pgs:GetChildren()) do v.Visible = false end
@@ -334,7 +331,7 @@ function lib:Create(title)
                 tw(b, {TextSize = 11}, 0.1)
                 task.wait(0.1)
                 tw(b, {TextSize = 13}, 0.1)
-                cb()
+                if cb then cb() end
             end)
         end
 
@@ -376,7 +373,7 @@ function lib:Create(title)
                 st = not st
                 tw(c, {Position = st and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)})
                 tw(sw, {BackgroundColor3 = st and lib.theme.acc1 or lib.theme.str})
-                cb(st)
+                if cb then cb(st) end
             end)
         end
 
@@ -437,7 +434,7 @@ function lib:Create(title)
                     v = math.floor(min + ((max - min) * p))
                     tw(fill, {Size = UDim2.new(p, 0, 1, 0)}, 0.1)
                     vl.Text = tostring(v)
-                    cb(v)
+                    if cb then cb(v) end
                 end
             end)
         end
@@ -483,7 +480,7 @@ function lib:Create(title)
                 ob.Parent = c
                 Instance.new("UICorner", ob).CornerRadius = UDim.new(0, 4)
                 ob.MouseButton1Click:Connect(function()
-                    cb(o)
+                    if cb then cb(o) end
                     l.Text = txt..": "..o
                     tw(f, {Size = UDim2.new(0, 240, 0, 32)})
                     tw(arr, {Rotation = 0})
