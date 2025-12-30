@@ -3,7 +3,6 @@ local uis = game:GetService("UserInputService")
 local run = game:GetService("RunService")
 local core = game:GetService("CoreGui")
 local plr = game:GetService("Players").LocalPlayer
-local mouse = plr:GetMouse()
 
 local lib = {}
 
@@ -36,23 +35,36 @@ local function tw(obj, props, time)
 end
 
 local function drag(top, main)
-    local dragging, start, startPos
+    local dragging, dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        tw(main, {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)}, 0.05)
+    end
+
     top.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            start = input.Position
+            dragStart = input.Position
             startPos = main.Position
+            
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
             end)
         end
     end)
+
     top.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging then
-                local delta = input.Position - start
-                tw(main, {Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)}, 0.05)
-            end
+            dragInput = input
+        end
+    end)
+
+    uis.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
         end
     end)
 end
@@ -61,11 +73,10 @@ function lib:Create(title)
     local sg = Instance.new("ScreenGui")
     sg.Name = "EtherealUI_"..math.random(1,9999)
     sg.ResetOnSpawn = false
-    sg.IgnoreGuiInset = true
-    sg.DisplayOrder = 999
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    local success, _ = pcall(function() sg.Parent = core end)
-    if not success then sg.Parent = plr:WaitForChild("PlayerGui") end
+    pcall(function() sg.Parent = core end)
+    if sg.Parent ~= core then sg.Parent = plr:WaitForChild("PlayerGui") end
 
     local main = Instance.new("Frame")
     main.Size = UDim2.new(0, 260, 0, 370)
@@ -76,13 +87,13 @@ function lib:Create(title)
     
     local notifArea = Instance.new("Frame")
     notifArea.Size = UDim2.new(0, 200, 1, 0)
-    notifArea.Position = UDim2.new(1, -210, 0, 10)
+    notifArea.Position = UDim2.new(1, -210, 0, 20)
     notifArea.BackgroundTransparency = 1
     notifArea.Parent = sg
 
     local notifList = Instance.new("UIListLayout")
     notifList.Padding = UDim.new(0, 5)
-    notifList.VerticalAlignment = Enum.VerticalAlignment.Bottom
+    notifList.VerticalAlignment = Enum.VerticalAlignment.Top
     notifList.HorizontalAlignment = Enum.HorizontalAlignment.Right
     notifList.Parent = notifArea
     
@@ -331,7 +342,7 @@ function lib:Create(title)
                 tw(b, {TextSize = 11}, 0.1)
                 task.wait(0.1)
                 tw(b, {TextSize = 13}, 0.1)
-                if cb then cb() end
+                cb()
             end)
         end
 
@@ -373,7 +384,7 @@ function lib:Create(title)
                 st = not st
                 tw(c, {Position = st and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)})
                 tw(sw, {BackgroundColor3 = st and lib.theme.acc1 or lib.theme.str})
-                if cb then cb(st) end
+                cb(st)
             end)
         end
 
@@ -434,7 +445,7 @@ function lib:Create(title)
                     v = math.floor(min + ((max - min) * p))
                     tw(fill, {Size = UDim2.new(p, 0, 1, 0)}, 0.1)
                     vl.Text = tostring(v)
-                    if cb then cb(v) end
+                    cb(v)
                 end
             end)
         end
@@ -469,23 +480,27 @@ function lib:Create(title)
             c.BackgroundTransparency = 1
             c.Parent = f
             local cl = Instance.new("UIListLayout"); cl.SortOrder = Enum.SortOrder.LayoutOrder; cl.Padding = UDim.new(0, 3); cl.Parent = c
-            for _, o in ipairs(opts) do
-                local ob = Instance.new("TextButton")
-                ob.Size = UDim2.new(1, 0, 0, 25)
-                ob.BackgroundColor3 = lib.theme.bg
-                ob.Text = o
-                ob.TextColor3 = lib.theme.dim
-                ob.Font = lib.theme.f1
-                ob.TextSize = 12
-                ob.Parent = c
-                Instance.new("UICorner", ob).CornerRadius = UDim.new(0, 4)
-                ob.MouseButton1Click:Connect(function()
-                    if cb then cb(o) end
-                    l.Text = txt..": "..o
-                    tw(f, {Size = UDim2.new(0, 240, 0, 32)})
-                    tw(arr, {Rotation = 0})
-                end)
+            
+            if opts then
+                for _, o in ipairs(opts) do
+                    local ob = Instance.new("TextButton")
+                    ob.Size = UDim2.new(1, 0, 0, 25)
+                    ob.BackgroundColor3 = lib.theme.bg
+                    ob.Text = o
+                    ob.TextColor3 = lib.theme.dim
+                    ob.Font = lib.theme.f1
+                    ob.TextSize = 12
+                    ob.Parent = c
+                    Instance.new("UICorner", ob).CornerRadius = UDim.new(0, 4)
+                    ob.MouseButton1Click:Connect(function()
+                        cb(o)
+                        l.Text = txt..": "..o
+                        tw(f, {Size = UDim2.new(0, 240, 0, 32)})
+                        tw(arr, {Rotation = 0})
+                    end)
+                end
             end
+            
             local open = false
             local b = Instance.new("TextButton")
             b.Size = UDim2.new(1,0,0,32)
@@ -494,7 +509,8 @@ function lib:Create(title)
             b.Parent = f
             b.MouseButton1Click:Connect(function()
                 open = not open
-                tw(f, {Size = UDim2.new(0, 240, 0, open and (35 + (#opts * 28) + 5) or 32)})
+                local count = opts and #opts or 0
+                tw(f, {Size = UDim2.new(0, 240, 0, open and (35 + (count * 28) + 5) or 32)})
                 tw(arr, {Rotation = open and 180 or 0})
             end)
         end
