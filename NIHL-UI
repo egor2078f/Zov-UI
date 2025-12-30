@@ -287,6 +287,7 @@ function lib:Create(title)
 
         local el = {}
 
+        -- 1. SECTION (Original)
         function el:Section(txt)
             local s = Instance.new("TextLabel")
             s.Size = UDim2.new(0, 240, 0, 18)
@@ -300,6 +301,21 @@ function lib:Create(title)
             Instance.new("UIPadding", s).PaddingLeft = UDim.new(0, 2)
         end
 
+        -- 2. SUBSECTION (NEW)
+        function el:SubSection(txt)
+            local s = Instance.new("TextLabel")
+            s.Size = UDim2.new(0, 240, 0, 14)
+            s.BackgroundTransparency = 1
+            s.Text = txt
+            s.TextColor3 = lib.theme.dim
+            s.Font = lib.theme.f2
+            s.TextSize = 10
+            s.TextXAlignment = Enum.TextXAlignment.Left
+            s.Parent = pg
+            Instance.new("UIPadding", s).PaddingLeft = UDim.new(0, 2)
+        end
+
+        -- 3. SEPARATOR (Original)
         function el:Separator()
             local s = Instance.new("Frame")
             s.Size = UDim2.new(0, 240, 0, 1)
@@ -308,6 +324,7 @@ function lib:Create(title)
             s.Parent = pg
         end
 
+        -- 4. LABEL (Original)
         function el:Label(txt)
             local l = Instance.new("TextLabel")
             l.Size = UDim2.new(0, 240, 0, 20)
@@ -321,6 +338,45 @@ function lib:Create(title)
             Instance.new("UIPadding", l).PaddingLeft = UDim.new(0, 5)
         end
 
+        -- 5. PARAGRAPH (NEW)
+        function el:Paragraph(title, content)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 0)
+            f.BackgroundColor3 = lib.theme.sec
+            f.Parent = pg
+            f.AutomaticSize = Enum.AutomaticSize.Y
+            Instance.new("UICorner", f).CornerRadius = lib.theme.cr
+            
+            local tl = Instance.new("TextLabel")
+            tl.Text = title
+            tl.Font = lib.theme.f2
+            tl.TextColor3 = lib.theme.acc1
+            tl.TextSize = 13
+            tl.Size = UDim2.new(1, -10, 0, 20)
+            tl.Position = UDim2.new(0, 5, 0, 5)
+            tl.BackgroundTransparency = 1
+            tl.TextXAlignment = Enum.TextXAlignment.Left
+            tl.Parent = f
+            
+            local cl = Instance.new("TextLabel")
+            cl.Text = content
+            cl.Font = lib.theme.f1
+            cl.TextColor3 = lib.theme.dim
+            cl.TextSize = 12
+            cl.Size = UDim2.new(1, -10, 0, 0)
+            cl.Position = UDim2.new(0, 5, 0, 25)
+            cl.BackgroundTransparency = 1
+            cl.TextXAlignment = Enum.TextXAlignment.Left
+            cl.TextWrapped = true
+            cl.AutomaticSize = Enum.AutomaticSize.Y
+            cl.Parent = f
+            
+            local pad = Instance.new("UIPadding")
+            pad.PaddingBottom = UDim.new(0, 8)
+            pad.Parent = f
+        end
+
+        -- 6. BUTTON (Original)
         function el:Button(txt, cb)
             local f = Instance.new("Frame")
             f.Size = UDim2.new(0, 240, 0, 32)
@@ -346,6 +402,19 @@ function lib:Create(title)
             end)
         end
 
+        -- 7. CLIPBOARD BUTTON (NEW)
+        function el:Clipboard(txt, copyText)
+            el:Button(txt, function()
+                if setclipboard then
+                    setclipboard(copyText)
+                    win_funcs:Notify("Copied", "Copied to clipboard!", 2)
+                else
+                    win_funcs:Notify("Error", "Your executor doesn't support setclipboard", 3)
+                end
+            end)
+        end
+
+        -- 8. TOGGLE (Original)
         function el:Toggle(txt, def, cb)
             local st = def
             local f = Instance.new("Frame")
@@ -388,6 +457,7 @@ function lib:Create(title)
             end)
         end
 
+        -- 9. SLIDER (Original)
         function el:Slider(txt, min, max, def, cb)
             local v = def
             local f = Instance.new("Frame")
@@ -450,6 +520,95 @@ function lib:Create(title)
             end)
         end
 
+        -- 10. INPUT (NEW)
+        function el:Input(txt, placeholder, cb)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 32)
+            f.BackgroundColor3 = lib.theme.sec
+            f.Parent = pg
+            Instance.new("UICorner", f).CornerRadius = lib.theme.cr
+            
+            local l = Instance.new("TextLabel")
+            l.Text = txt
+            l.Size = UDim2.new(0, 100, 1, 0)
+            l.Position = UDim2.new(0, 10, 0, 0)
+            l.BackgroundTransparency = 1
+            l.Font = lib.theme.f1
+            l.TextColor3 = lib.theme.txt
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.TextSize = 13
+            l.Parent = f
+
+            local box = Instance.new("TextBox")
+            box.Size = UDim2.new(0, 100, 0, 20)
+            box.Position = UDim2.new(1, -110, 0.5, -10)
+            box.BackgroundColor3 = lib.theme.bg
+            box.TextColor3 = lib.theme.txt
+            box.PlaceholderText = placeholder
+            box.PlaceholderColor3 = lib.theme.str
+            box.Font = lib.theme.f1
+            box.TextSize = 12
+            box.Parent = f
+            Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+
+            box.FocusLost:Connect(function()
+                cb(box.Text)
+            end)
+        end
+
+        -- 11. KEYBIND (NEW)
+        function el:Keybind(txt, def, cb)
+            local key = def
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 32)
+            f.BackgroundColor3 = lib.theme.sec
+            f.Parent = pg
+            Instance.new("UICorner", f).CornerRadius = lib.theme.cr
+
+            local l = Instance.new("TextLabel")
+            l.Text = txt
+            l.Size = UDim2.new(1, -80, 1, 0)
+            l.Position = UDim2.new(0, 10, 0, 0)
+            l.BackgroundTransparency = 1
+            l.Font = lib.theme.f1
+            l.TextColor3 = lib.theme.txt
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.TextSize = 13
+            l.Parent = f
+
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(0, 70, 0, 20)
+            b.Position = UDim2.new(1, -80, 0.5, -10)
+            b.BackgroundColor3 = lib.theme.bg
+            b.Text = key.Name
+            b.TextColor3 = lib.theme.dim
+            b.Font = lib.theme.f2
+            b.TextSize = 11
+            b.Parent = f
+            Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+
+            local binding = false
+            b.MouseButton1Click:Connect(function()
+                binding = true
+                b.Text = "..."
+                b.TextColor3 = lib.theme.acc1
+            end)
+
+            uis.InputBegan:Connect(function(input)
+                if binding then
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        key = input.KeyCode
+                        binding = false
+                        b.Text = key.Name
+                        b.TextColor3 = lib.theme.dim
+                    end
+                elseif input.KeyCode == key then
+                    cb()
+                end
+            end)
+        end
+
+        -- 12. DROPDOWN (Original)
         function el:Dropdown(txt, opts, cb)
             local f = Instance.new("Frame")
             f.Size = UDim2.new(0, 240, 0, 32)
@@ -513,6 +672,197 @@ function lib:Create(title)
                 tw(f, {Size = UDim2.new(0, 240, 0, open and (35 + (count * 28) + 5) or 32)})
                 tw(arr, {Rotation = open and 180 or 0})
             end)
+        end
+        
+        -- 13. COLOR PICKER (NEW)
+        function el:ColorPicker(txt, def, cb)
+            local col = def or Color3.new(1,1,1)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 32)
+            f.BackgroundColor3 = lib.theme.sec
+            f.Parent = pg
+            f.ClipsDescendants = true
+            Instance.new("UICorner", f).CornerRadius = lib.theme.cr
+            
+            local l = Instance.new("TextLabel")
+            l.Text = txt
+            l.Size = UDim2.new(1, -50, 0, 32)
+            l.Position = UDim2.new(0, 10, 0, 0)
+            l.BackgroundTransparency = 1
+            l.Font = lib.theme.f1
+            l.TextColor3 = lib.theme.txt
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.TextSize = 13
+            l.Parent = f
+            
+            local prev = Instance.new("Frame")
+            prev.Size = UDim2.new(0, 24, 0, 12)
+            prev.Position = UDim2.new(1, -34, 0, 10)
+            prev.BackgroundColor3 = col
+            prev.Parent = f
+            Instance.new("UICorner", prev).CornerRadius = UDim.new(0, 4)
+
+            local cbox = Instance.new("Frame")
+            cbox.Size = UDim2.new(1, -10, 0, 0)
+            cbox.Position = UDim2.new(0, 5, 0, 35)
+            cbox.BackgroundTransparency = 1
+            cbox.Parent = f
+            local cil = Instance.new("UIListLayout"); cil.Padding = UDim.new(0,5); cil.Parent = cbox
+
+            local function mkSl(c, cc)
+                local fr = Instance.new("Frame"); fr.Size=UDim2.new(1,0,0,20); fr.BackgroundTransparency=1; fr.Parent=cbox
+                local t = Instance.new("TextLabel"); t.Text=cc; t.Size=UDim2.new(0,15,1,0); t.BackgroundTransparency=1; t.TextColor3=lib.theme.dim; t.Parent=fr
+                local b = Instance.new("Frame"); b.Size=UDim2.new(1,-20,0,4); b.Position=UDim2.new(0,20,0.5,-2); b.BackgroundColor3=lib.theme.str; b.Parent=fr
+                local fi = Instance.new("Frame"); fi.Size=UDim2.new(c,0,1,0); fi.BackgroundColor3=lib.theme[cc=="R" and "acc2" or (cc=="G" and "acc1" or "txt")]; fi.Parent=b
+                local btn = Instance.new("TextButton"); btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""; btn.Parent=fr
+                
+                btn.MouseButton1Click:Connect(function() -- simple step click
+                   -- Logic simplified for compactness
+                end)
+                -- Adding logic for sliders inside picker is complex in one block, using simplified inputs
+            end
+            
+            -- Simplified RGB inputs instead of sliders for stability
+            local function mkInp(n, val, set)
+                 local fr = Instance.new("Frame"); fr.Size=UDim2.new(1,0,0,25); fr.BackgroundTransparency=1; fr.Parent=cbox
+                 local tl = Instance.new("TextLabel"); tl.Text=n; tl.TextColor3=lib.theme.dim; tl.Size=UDim2.new(0,20,1,0); tl.BackgroundTransparency=1; tl.Parent=fr
+                 local bx = Instance.new("TextBox"); bx.Text=tostring(math.floor(val*255)); bx.Size=UDim2.new(0,180,0,20); bx.Position=UDim2.new(0,25,0,2); bx.BackgroundColor3=lib.theme.bg; bx.TextColor3=lib.theme.txt; bx.Parent=fr
+                 bx.FocusLost:Connect(function()
+                    local n = tonumber(bx.Text) or 0
+                    set(math.clamp(n,0,255)/255)
+                    prev.BackgroundColor3 = col
+                    cb(col)
+                 end)
+            end
+            
+            mkInp("R", col.R, function(v) col = Color3.new(v, col.G, col.B) end)
+            mkInp("G", col.G, function(v) col = Color3.new(col.R, v, col.B) end)
+            mkInp("B", col.B, function(v) col = Color3.new(col.R, col.G, v) end)
+
+            local open = false
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1,0,0,32)
+            b.BackgroundTransparency = 1
+            b.Text = ""
+            b.Parent = f
+            b.MouseButton1Click:Connect(function()
+                open = not open
+                tw(f, {Size = UDim2.new(0, 240, 0, open and 115 or 32)})
+            end)
+        end
+
+        -- 14. IMAGE (NEW)
+        function el:Image(id, height)
+            local i = Instance.new("ImageLabel")
+            i.Size = UDim2.new(0, 240, 0, height or 100)
+            i.BackgroundTransparency = 1
+            i.Image = "rbxassetid://"..id
+            i.ScaleType = Enum.ScaleType.Fit
+            i.Parent = pg
+            Instance.new("UICorner", i).CornerRadius = lib.theme.cr
+        end
+        
+        -- 15. STATUS (NEW)
+        function el:Status(txt, active)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 24)
+            f.BackgroundTransparency = 1
+            f.Parent = pg
+            
+            local l = Instance.new("TextLabel")
+            l.Text = txt
+            l.Font = lib.theme.f1
+            l.TextColor3 = lib.theme.dim
+            l.TextSize = 13
+            l.Size = UDim2.new(1, -20, 1, 0)
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.BackgroundTransparency = 1
+            l.Parent = f
+            Instance.new("UIPadding", l).PaddingLeft = UDim.new(0, 5)
+
+            local d = Instance.new("Frame")
+            d.Size = UDim2.new(0, 10, 0, 10)
+            d.Position = UDim2.new(1, -15, 0.5, -5)
+            d.BackgroundColor3 = active and Color3.new(0.2, 1, 0.2) or Color3.new(1, 0.2, 0.2)
+            d.Parent = f
+            Instance.new("UICorner", d).CornerRadius = UDim.new(1,0)
+        end
+        
+        -- 16. PROGRESS BAR (NEW)
+        function el:ProgressBar(txt)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 36)
+            f.BackgroundColor3 = lib.theme.sec
+            f.Parent = pg
+            Instance.new("UICorner", f).CornerRadius = lib.theme.cr
+            
+            local l = Instance.new("TextLabel")
+            l.Text = txt
+            l.Font = lib.theme.f1
+            l.TextColor3 = lib.theme.txt
+            l.TextSize = 12
+            l.Size = UDim2.new(1, 0, 0, 20)
+            l.Position = UDim2.new(0,10,0,0)
+            l.BackgroundTransparency = 1
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.Parent = f
+            
+            local b = Instance.new("Frame")
+            b.Size = UDim2.new(1, -20, 0, 6)
+            b.Position = UDim2.new(0, 10, 0, 24)
+            b.BackgroundColor3 = lib.theme.str
+            b.Parent = f
+            Instance.new("UICorner", b).CornerRadius = UDim.new(1,0)
+            
+            local fill = Instance.new("Frame")
+            fill.Size = UDim2.new(0, 0, 1, 0)
+            fill.BackgroundColor3 = lib.theme.acc2
+            fill.Parent = b
+            Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
+            
+            return {
+                Set = function(val) -- 0 to 100
+                    tw(fill, {Size = UDim2.new(math.clamp(val,0,100)/100, 0, 1, 0)})
+                end
+            }
+        end
+        
+        -- 17. DUAL LABEL (NEW) - Good for stats
+        function el:DualLabel(txt1, txt2)
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 20)
+            f.BackgroundTransparency = 1
+            f.Parent = pg
+            
+            local l1 = Instance.new("TextLabel")
+            l1.Text = txt1
+            l1.Font = lib.theme.f1
+            l1.TextColor3 = lib.theme.dim
+            l1.TextSize = 13
+            l1.Size = UDim2.new(0.5, 0, 1, 0)
+            l1.TextXAlignment = Enum.TextXAlignment.Left
+            l1.BackgroundTransparency = 1
+            l1.Parent = f
+            Instance.new("UIPadding", l1).PaddingLeft = UDim.new(0, 5)
+            
+            local l2 = Instance.new("TextLabel")
+            l2.Text = txt2
+            l2.Font = lib.theme.f2
+            l2.TextColor3 = lib.theme.acc1
+            l2.TextSize = 13
+            l2.Size = UDim2.new(0.5, 0, 1, 0)
+            l2.Position = UDim2.new(0.5, 0, 0, 0)
+            l2.TextXAlignment = Enum.TextXAlignment.Right
+            l2.BackgroundTransparency = 1
+            l2.Parent = f
+            Instance.new("UIPadding", l2).PaddingRight = UDim.new(0, 5)
+            
+            return {
+                Update = function(t1, t2)
+                    if t1 then l1.Text = t1 end
+                    if t2 then l2.Text = t2 end
+                end
+            }
         end
 
         return el
