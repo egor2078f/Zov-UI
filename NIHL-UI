@@ -69,6 +69,47 @@ local function drag(top, main)
     end)
 end
 
+-- HSV to RGB conversion
+local function hsvToRgb(h, s, v)
+    local c = v * s
+    local x = c * (1 - math.abs((h / 60) % 2 - 1))
+    local m = v - c
+    local r, g, b = 0, 0, 0
+    
+    if h < 60 then r, g, b = c, x, 0
+    elseif h < 120 then r, g, b = x, c, 0
+    elseif h < 180 then r, g, b = 0, c, x
+    elseif h < 240 then r, g, b = 0, x, c
+    elseif h < 300 then r, g, b = x, 0, c
+    else r, g, b = c, 0, x end
+    
+    return Color3.new(r + m, g + m, b + m)
+end
+
+-- RGB to HSV conversion
+local function rgbToHsv(color)
+    local r, g, b = color.R, color.G, color.B
+    local max = math.max(r, g, b)
+    local min = math.min(r, g, b)
+    local delta = max - min
+    
+    local h = 0
+    if delta > 0 then
+        if max == r then
+            h = 60 * (((g - b) / delta) % 6)
+        elseif max == g then
+            h = 60 * (((b - r) / delta) + 2)
+        else
+            h = 60 * (((r - g) / delta) + 4)
+        end
+    end
+    
+    local s = max == 0 and 0 or delta / max
+    local v = max
+    
+    return h, s, v
+end
+
 function lib:Create(title)
     local sg = Instance.new("ScreenGui")
     sg.Name = "EtherealUI_"..math.random(1,9999)
@@ -492,16 +533,22 @@ function lib:Create(title)
             knob.BackgroundColor3 = lib.theme.txt
             knob.Parent = fill
             Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
-            local b = Instance.new("TextButton")
-            b.Size = UDim2.new(1,0,1,0)
-            b.BackgroundTransparency = 1
-            b.Text = ""
-            b.Parent = f
+            
             local drag = false
-            b.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=true end end)
-            uis.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=false end end)
+            bar.InputBegan:Connect(function(i) 
+                if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
+                    drag = true 
+                end 
+            end)
+            
+            uis.InputEnded:Connect(function(i) 
+                if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
+                    drag = false 
+                end 
+            end)
+            
             uis.InputChanged:Connect(function(i)
-                if drag and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+                if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
                     local p = math.clamp((i.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
                     v = math.floor(min + ((max - min) * p))
                     tw(fill, {Size = UDim2.new(p, 0, 1, 0)}, 0.1)
@@ -659,6 +706,323 @@ function lib:Create(title)
                 local count = opts and #opts or 0
                 tw(f, {Size = UDim2.new(0, 240, 0, open and (35 + (count * 28) + 5) or 32)})
                 tw(arr, {Rotation = open and 180 or 0})
+            end)
+        end
+
+        -- HSV COLOR PICKER
+        function el:ColorPicker(txt, def, cb)
+            local col = def or Color3.new(1, 1, 1)
+            local h, s, v = rgbToHsv(col)
+            
+            local f = Instance.new("Frame")
+            f.Size = UDim2.new(0, 240, 0, 32)
+            f.BackgroundColor3 = lib.theme.sec
+            f.Parent = pg
+            f.ClipsDescendants = true
+            Instance.new("UICorner", f).CornerRadius = lib.theme.cr
+            
+            local l = Instance.new("TextLabel")
+            l.Text = txt
+            l.Size = UDim2.new(1, -50, 0, 32)
+            l.Position = UDim2.new(0, 10, 0, 0)
+            l.BackgroundTransparency = 1
+            l.Font = lib.theme.f1
+            l.TextColor3 = lib.theme.txt
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.TextSize = 13
+            l.Parent = f
+            
+            -- Color preview box
+            local prev = Instance.new("Frame")
+            prev.Size = UDim2.new(0, 30, 0, 18)
+            prev.Position = UDim2.new(1, -40, 0, 7)
+            prev.BackgroundColor3 = col
+            prev.Parent = f
+            Instance.new("UICorner", prev).CornerRadius = UDim.new(0, 6)
+            local prevStroke = Instance.new("UIStroke")
+            prevStroke.Color = lib.theme.str
+            prevStroke.Thickness = 2
+            prevStroke.Parent = prev
+            
+            -- Picker container
+            local picker = Instance.new("Frame")
+            picker.Size = UDim2.new(1, -10, 0, 0)
+            picker.Position = UDim2.new(0, 5, 0, 38)
+            picker.BackgroundTransparency = 1
+            picker.Parent = f
+            
+            -- SV Gradient picker (main color square)
+            local svFrame = Instance.new("Frame")
+            svFrame.Size = UDim2.new(1, -30, 0, 160)
+            svFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+            svFrame.Parent = picker
+            Instance.new("UICorner", svFrame).CornerRadius = UDim.new(0, 6)
+            
+            -- Hue gradient on SV frame
+            local hueGrad = Instance.new("UIGradient")
+            hueGrad.Color = ColorSequence.new(hsvToRgb(h, 1, 1))
+            hueGrad.Parent = svFrame
+            
+            -- Saturation overlay
+            local satOverlay = Instance.new("Frame")
+            satOverlay.Size = UDim2.new(1, 0, 1, 0)
+            satOverlay.BackgroundColor3 = Color3.new(1, 1, 1)
+            satOverlay.BackgroundTransparency = 0
+            satOverlay.Parent = svFrame
+            Instance.new("UICorner", satOverlay).CornerRadius = UDim.new(0, 6)
+            local satGrad = Instance.new("UIGradient")
+            satGrad.Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
+                ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
+            }
+            satGrad.Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 0),
+                NumberSequenceKeypoint.new(1, 1)
+            }
+            satGrad.Parent = satOverlay
+            
+            -- Value (brightness) overlay
+            local valOverlay = Instance.new("Frame")
+            valOverlay.Size = UDim2.new(1, 0, 1, 0)
+            valOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
+            valOverlay.BackgroundTransparency = 0
+            valOverlay.Parent = svFrame
+            Instance.new("UICorner", valOverlay).CornerRadius = UDim.new(0, 6)
+            local valGrad = Instance.new("UIGradient")
+            valGrad.Rotation = 90
+            valGrad.Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 1),
+                NumberSequenceKeypoint.new(1, 0)
+            }
+            valGrad.Parent = valOverlay
+            
+            -- SV cursor
+            local svCursor = Instance.new("Frame")
+            svCursor.Size = UDim2.new(0, 12, 0, 12)
+            svCursor.Position = UDim2.new(s, -6, 1 - v, -6)
+            svCursor.BackgroundColor3 = Color3.new(1, 1, 1)
+            svCursor.Parent = svFrame
+            svCursor.ZIndex = 5
+            Instance.new("UICorner", svCursor).CornerRadius = UDim.new(1, 0)
+            local svCursorStroke = Instance.new("UIStroke")
+            svCursorStroke.Color = Color3.new(0, 0, 0)
+            svCursorStroke.Thickness = 2
+            svCursorStroke.Parent = svCursor
+            
+            -- Hue slider
+            local hueSlider = Instance.new("Frame")
+            hueSlider.Size = UDim2.new(0, 20, 0, 160)
+            hueSlider.Position = UDim2.new(1, -20, 0, 0)
+            hueSlider.Parent = picker
+            Instance.new("UICorner", hueSlider).CornerRadius = UDim.new(0, 6)
+            
+            local hueGradient = Instance.new("UIGradient")
+            hueGradient.Rotation = 90
+            hueGradient.Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.new(1, 0, 0)),
+                ColorSequenceKeypoint.new(0.17, Color3.new(1, 1, 0)),
+                ColorSequenceKeypoint.new(0.33, Color3.new(0, 1, 0)),
+                ColorSequenceKeypoint.new(0.5, Color3.new(0, 1, 1)),
+                ColorSequenceKeypoint.new(0.67, Color3.new(0, 0, 1)),
+                ColorSequenceKeypoint.new(0.83, Color3.new(1, 0, 1)),
+                ColorSequenceKeypoint.new(1, Color3.new(1, 0, 0))
+            }
+            hueGradient.Parent = hueSlider
+            
+            -- Hue cursor
+            local hueCursor = Instance.new("Frame")
+            hueCursor.Size = UDim2.new(1, 4, 0, 4)
+            hueCursor.Position = UDim2.new(0, -2, h / 360, -2)
+            hueCursor.BackgroundColor3 = Color3.new(1, 1, 1)
+            hueCursor.Parent = hueSlider
+            hueCursor.ZIndex = 5
+            Instance.new("UICorner", hueCursor).CornerRadius = UDim.new(0, 2)
+            local hueCursorStroke = Instance.new("UIStroke")
+            hueCursorStroke.Color = Color3.new(0, 0, 0)
+            hueCursorStroke.Thickness = 2
+            hueCursorStroke.Parent = hueCursor
+            
+            -- RGB inputs
+            local rgbFrame = Instance.new("Frame")
+            rgbFrame.Size = UDim2.new(1, 0, 0, 30)
+            rgbFrame.Position = UDim2.new(0, 0, 0, 170)
+            rgbFrame.BackgroundTransparency = 1
+            rgbFrame.Parent = picker
+            
+            local function createRGBInput(name, pos, getVal, setVal)
+                local inputFrame = Instance.new("Frame")
+                inputFrame.Size = UDim2.new(0.32, -2, 1, 0)
+                inputFrame.Position = UDim2.new(pos * 0.33, 0, 0, 0)
+                inputFrame.BackgroundColor3 = lib.theme.bg
+                inputFrame.Parent = rgbFrame
+                Instance.new("UICorner", inputFrame).CornerRadius = UDim.new(0, 4)
+                
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(0, 20, 1, 0)
+                label.BackgroundTransparency = 1
+                label.Text = name
+                label.TextColor3 = lib.theme.dim
+                label.Font = lib.theme.f2
+                label.TextSize = 11
+                label.Parent = inputFrame
+                
+                local input = Instance.new("TextBox")
+                input.Size = UDim2.new(1, -25, 1, -4)
+                input.Position = UDim2.new(0, 22, 0, 2)
+                input.BackgroundTransparency = 1
+                input.Text = tostring(math.floor(getVal() * 255))
+                input.TextColor3 = lib.theme.txt
+                input.Font = lib.theme.f1
+                input.TextSize = 11
+                input.TextXAlignment = Enum.TextXAlignment.Center
+                input.Parent = inputFrame
+                
+                input.FocusLost:Connect(function()
+                    local num = tonumber(input.Text) or 0
+                    num = math.clamp(num, 0, 255)
+                    setVal(num / 255)
+                    input.Text = tostring(num)
+                    
+                    col = Color3.new(
+                        math.clamp(tonumber(rgbFrame:FindFirstChild("R").TextBox.Text) / 255 or 0, 0, 1),
+                        math.clamp(tonumber(rgbFrame:FindFirstChild("G").TextBox.Text) / 255 or 0, 0, 1),
+                        math.clamp(tonumber(rgbFrame:FindFirstChild("B").TextBox.Text) / 255 or 0, 0, 1)
+                    )
+                    h, s, v = rgbToHsv(col)
+                    prev.BackgroundColor3 = col
+                    hueGrad.Color = ColorSequence.new(hsvToRgb(h, 1, 1))
+                    svCursor.Position = UDim2.new(s, -6, 1 - v, -6)
+                    hueCursor.Position = UDim2.new(0, -2, h / 360, -2)
+                    cb(col)
+                end)
+                
+                inputFrame.Name = name
+                input.Name = "TextBox"
+                return input
+            end
+            
+            local rInput = createRGBInput("R", 0, function() return col.R end, function(val) col = Color3.new(val, col.G, col.B) end)
+            local gInput = createRGBInput("G", 1, function() return col.G end, function(val) col = Color3.new(col.R, val, col.B) end)
+            local bInput = createRGBInput("B", 2, function() return col.B end, function(val) col = Color3.new(col.R, col.G, val) end)
+            
+            -- Hex input
+            local hexFrame = Instance.new("Frame")
+            hexFrame.Size = UDim2.new(1, 0, 0, 30)
+            hexFrame.Position = UDim2.new(0, 0, 0, 205)
+            hexFrame.BackgroundColor3 = lib.theme.bg
+            hexFrame.Parent = picker
+            Instance.new("UICorner", hexFrame).CornerRadius = UDim.new(0, 4)
+            
+            local hexLabel = Instance.new("TextLabel")
+            hexLabel.Size = UDim2.new(0, 30, 1, 0)
+            hexLabel.BackgroundTransparency = 1
+            hexLabel.Text = "HEX"
+            hexLabel.TextColor3 = lib.theme.dim
+            hexLabel.Font = lib.theme.f2
+            hexLabel.TextSize = 11
+            hexLabel.Parent = hexFrame
+            
+            local hexInput = Instance.new("TextBox")
+            hexInput.Size = UDim2.new(1, -35, 1, -4)
+            hexInput.Position = UDim2.new(0, 32, 0, 2)
+            hexInput.BackgroundTransparency = 1
+            hexInput.Text = string.format("#%02X%02X%02X", col.R * 255, col.G * 255, col.B * 255)
+            hexInput.TextColor3 = lib.theme.txt
+            hexInput.Font = lib.theme.f1
+            hexInput.TextSize = 11
+            hexInput.TextXAlignment = Enum.TextXAlignment.Center
+            hexInput.Parent = hexFrame
+            
+            hexInput.FocusLost:Connect(function()
+                local hex = hexInput.Text:gsub("#", "")
+                if #hex == 6 then
+                    local r = tonumber(hex:sub(1, 2), 16) or 0
+                    local g = tonumber(hex:sub(3, 4), 16) or 0
+                    local b = tonumber(hex:sub(5, 6), 16) or 0
+                    col = Color3.new(r / 255, g / 255, b / 255)
+                    h, s, v = rgbToHsv(col)
+                    prev.BackgroundColor3 = col
+                    hueGrad.Color = ColorSequence.new(hsvToRgb(h, 1, 1))
+                    svCursor.Position = UDim2.new(s, -6, 1 - v, -6)
+                    hueCursor.Position = UDim2.new(0, -2, h / 360, -2)
+                    rInput.Text = tostring(math.floor(col.R * 255))
+                    gInput.Text = tostring(math.floor(col.G * 255))
+                    bInput.Text = tostring(math.floor(col.B * 255))
+                    cb(col)
+                end
+            end)
+            
+            -- SV picker interaction
+            local svDragging = false
+            svFrame.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    svDragging = true
+                end
+            end)
+            
+            uis.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    svDragging = false
+                end
+            end)
+            
+            uis.InputChanged:Connect(function(input)
+                if svDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local posX = math.clamp((input.Position.X - svFrame.AbsolutePosition.X) / svFrame.AbsoluteSize.X, 0, 1)
+                    local posY = math.clamp((input.Position.Y - svFrame.AbsolutePosition.Y) / svFrame.AbsoluteSize.Y, 0, 1)
+                    s = posX
+                    v = 1 - posY
+                    col = hsvToRgb(h, s, v)
+                    prev.BackgroundColor3 = col
+                    svCursor.Position = UDim2.new(s, -6, 1 - v, -6)
+                    rInput.Text = tostring(math.floor(col.R * 255))
+                    gInput.Text = tostring(math.floor(col.G * 255))
+                    bInput.Text = tostring(math.floor(col.B * 255))
+                    hexInput.Text = string.format("#%02X%02X%02X", col.R * 255, col.G * 255, col.B * 255)
+                    cb(col)
+                end
+            end)
+            
+            -- Hue slider interaction
+            local hueDragging = false
+            hueSlider.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    hueDragging = true
+                end
+            end)
+            
+            uis.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    hueDragging = false
+                end
+            end)
+            
+            uis.InputChanged:Connect(function(input)
+                if hueDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local posY = math.clamp((input.Position.Y - hueSlider.AbsolutePosition.Y) / hueSlider.AbsoluteSize.Y, 0, 1)
+                    h = posY * 360
+                    col = hsvToRgb(h, s, v)
+                    prev.BackgroundColor3 = col
+                    hueGrad.Color = ColorSequence.new(hsvToRgb(h, 1, 1))
+                    hueCursor.Position = UDim2.new(0, -2, posY, -2)
+                    rInput.Text = tostring(math.floor(col.R * 255))
+                    gInput.Text = tostring(math.floor(col.G * 255))
+                    bInput.Text = tostring(math.floor(col.B * 255))
+                    hexInput.Text = string.format("#%02X%02X%02X", col.R * 255, col.G * 255, col.B * 255)
+                    cb(col)
+                end
+            end)
+            
+            -- Toggle picker
+            local open = false
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1, 0, 0, 32)
+            b.BackgroundTransparency = 1
+            b.Text = ""
+            b.Parent = f
+            b.MouseButton1Click:Connect(function()
+                open = not open
+                tw(f, {Size = UDim2.new(0, 240, 0, open and 280 or 32)}, 0.3)
             end)
         end
 
